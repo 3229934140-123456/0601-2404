@@ -36,12 +36,26 @@ import { GameRenderer } from './renderer';
 const FIXED_TIMESTEP = 1 / 60;
 const MAX_FRAME_TIME = 0.25;
 
+export interface GameOverStats {
+  score: number;
+  distance: number;
+  ores: number;
+  goldOreCount: number;
+  damageTaken: number;
+  itemsUsed: string[];
+  levelType: 'normal' | 'timed';
+  timeLimit?: number;
+  timeElapsed?: number;
+  noDamage: boolean;
+}
+
 export interface EngineCallbacks {
   onStateChange?: (state: EngineState) => void;
   onCollision?: (result: CollisionResult) => void;
-  onGameOver?: (score: number, distance: number, ores: number) => void;
+  onGameOver?: (stats: GameOverStats) => void;
   onScoreChange?: (score: number) => void;
   onOreCollected?: (value: number) => void;
+  onTimeUpdate?: (remainingTime: number, timeLimit: number) => void;
 }
 
 export class GameEngine {
@@ -65,6 +79,8 @@ export class GameEngine {
   private spawnTimer: number = 0;
   private spawnInterval: number = 1.5;
   private callbacks: EngineCallbacks = {};
+  private itemsUsed: string[] = [];
+  private startTime: number = 0;
 
   private groundY: number = 0;
   private trackWidth: number = 120;
@@ -118,11 +134,16 @@ export class GameEngine {
       score: 0,
       distance: 0,
       ores: 0,
+      goldOreCount: 0,
+      damageTaken: 0,
       health: 100,
       currentTrack: TRACK_CENTER,
       speed: this.config.baseSpeed,
       activeEffects: [],
       currentLevelId: 1,
+      remainingTime: undefined,
+      timeLimit: undefined,
+      levelType: 'normal',
     };
   }
 
@@ -208,12 +229,19 @@ export class GameEngine {
       minecart.speed,
       level.speedMultiplier
     );
+    this.state.levelType = level.type;
+    if (level.type === 'timed' && level.timeLimit) {
+      this.state.timeLimit = level.timeLimit;
+      this.state.remainingTime = level.timeLimit;
+    }
 
     this.minecart = this.createInitialMinecart();
     this.entityManager.clear();
+    this.itemsUsed = [];
     this.spawnTimer = 0;
     this.accumulator = 0;
-    this.lastTime = performance.now();
+    this.startTime = performance.now();
+    this.lastTime = this.startTime;
     this.isRunning = true;
 
     this.notifyStateChange();
@@ -253,6 +281,16 @@ export class GameEngine {
     this.checkCollisions();
     this.renderer.updateParallax(this.state.speed, deltaTime);
     this.renderer.updateParticles(deltaTime);
+
+    if (this.state.levelType === 'timed' && this.state.remainingTime !== undefined) {
+      this.state.remainingTime = Math.max(0, this.state.remainingTime - deltaTime);
+      if (this.state.timeLimit) {
+        this.callbacks.onTimeUpdate?.(this.state.remainingTime, this.state.timeLimit);
+      }
+      if (this.state.remainingTime <= 0) {
+        this.gameOver();
+      }
+    }
   }
 
   private updateMinecart(deltaTime: number): void {
@@ -412,6 +450,9 @@ export class GameEngine {
           5,
           0.6
         );
+        if (ore.value >= 50) {
+          this.state.goldOreCount += 1;
+        }
         return {
           collided: true,
           entity,
@@ -453,6 +494,7 @@ export class GameEngine {
           6,
           0.5
         );
+        this.state.damageTaken += 1;
         return {
           collided: true,
           entity,
@@ -667,7 +709,25 @@ export class GameEngine {
     this.state.isGameOver = true;
     this.state.isPlaying = false;
     this.notifyStateChange();
-    this.callbacks.onGameOver?.(this.state.score, this.state.distance, this.state.ores);
+
+    const timeElapsed = this.state.timeLimit !== undefined && this.state.remainingTime !== undefined
+      ? this.state.timeLimit - this.state.remainingTime
+      : (performance.now() - this.startTime) / 1000;
+
+    const stats: GameOverStats = {
+      score: this.state.score,
+      distance: this.state.distance,
+      ores: this.state.ores,
+      goldOreCount: this.state.goldOreCount,
+      damageTaken: this.state.damageTaken,
+      itemsUsed: [...this.itemsUsed],
+      levelType: this.state.levelType || 'normal',
+      timeLimit: this.state.timeLimit,
+      timeElapsed,
+      noDamage: this.state.damageTaken === 0,
+    };
+
+    this.callbacks.onGameOver?.(stats);
   }
 
   restart(): void {
@@ -745,6 +805,7 @@ export class GameEngine {
       boost: 8,
     };
 
+    this.itemsUsed.push(type);
     this.addEffect(type, durations[type]);
     this.notifyStateChange();
     return true;

@@ -21,10 +21,10 @@ import { useGameStore } from '@/store/useGameStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useDailyQuest } from '@/hooks/useDailyQuest';
-import { useAchievementCheck } from '@/hooks/useAchievementCheck';
 import { getLevelById, type Level } from '@/data/levels';
-import { getMinecartById, type Minecart } from '@/data/minecarts';
+import { getMinecartById } from '@/data/minecarts';
 import type { LevelConfig, Minecart as MinecartType } from '@/types';
+import type { GameOverStats } from '@/game/engine';
 import { cn } from '@/lib/utils';
 
 interface GameLocationState {
@@ -38,13 +38,27 @@ export default function Game() {
   const gameCanvasRef = useRef<GameCanvasHandle>(null);
   const [showPauseMenu, setShowPauseMenu] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [itemsUsed, setItemsUsed] = useState(0);
+  const [lastSessionStats, setLastSessionStats] = useState<(GameOverStats & {
+    levelId?: string;
+    minecartId?: string;
+  }) | null>(null);
+  const [timeState, setTimeState] = useState<{
+    remaining?: number;
+    limit?: number;
+  }>({});
+  const [currentEngineState, setCurrentEngineState] = useState<any>(null);
 
   const { isPaused, isGameOver, resetGame } = useGameStore();
   const { currentMineCartId } = usePlayerStore();
-  const { soundVolume, musicVolume, toggleScreenShake, toggleParticleEffects, screenShake, particleEffects } = useSettingsStore();
+  const {
+    soundVolume,
+    musicVolume,
+    toggleScreenShake,
+    toggleParticleEffects,
+    screenShake,
+    particleEffects,
+  } = useSettingsStore();
   const { updateProgress } = useDailyQuest();
-  const { checkAchievements } = useAchievementCheck();
 
   const state = location.state as GameLocationState | null;
   const levelId = state?.levelId || 'level-1';
@@ -58,14 +72,14 @@ export default function Game() {
         id: parseInt(levelData.id.split('-').pop() || '1'),
         name: levelData.name,
         type: levelData.type,
-        difficulty: levelData.difficulty as 1 | 2 | 3 | 4 | 5,
+        difficulty: (levelData.difficulty || 1) as 1 | 2 | 3 | 4 | 5,
         timeLimit: levelData.timeLimit,
         background: levelData.background,
-        obstacleFrequency: levelData.obstacleFrequency,
-        oreFrequency: levelData.oreFrequency,
-        speedMultiplier: levelData.speedMultiplier,
-        unlocked: levelData.unlocked,
-        highScore: levelData.highScore,
+        obstacleFrequency: levelData.obstacleFrequency || 0.6,
+        oreFrequency: levelData.oreFrequency || 0.7,
+        speedMultiplier: levelData.speedMultiplier || 1,
+        unlocked: !!levelData.unlocked,
+        highScore: 0,
       }
     : null;
 
@@ -83,26 +97,21 @@ export default function Game() {
     : null;
 
   const handleGameOver = useCallback(
-    (score: number, distance: number, ores: number) => {
+    (stats: GameOverStats) => {
+      const enrichedStats = {
+        ...stats,
+        levelId,
+        minecartId,
+      };
+      setLastSessionStats(enrichedStats);
+
       updateProgress({ type: 'completeLevels', amount: 1 });
-      updateProgress({ type: 'earnScore', amount: score });
-      updateProgress({ type: 'travelDistance', amount: Math.floor(distance) });
-      updateProgress({ type: 'collectOre', amount: ores });
-      updateProgress({ type: 'useItems', amount: itemsUsed });
-
-      const unlocked = checkAchievements({
-        score,
-        distance,
-        oreCount: ores,
-        itemsUsed,
-        levelsCompleted: 1,
-      });
-
-      unlocked.forEach((achievement) => {
-        console.log('成就解锁:', achievement);
-      });
+      updateProgress({ type: 'earnScore', amount: stats.score });
+      updateProgress({ type: 'travelDistance', amount: Math.floor(stats.distance) });
+      updateProgress({ type: 'collectOre', amount: stats.ores });
+      updateProgress({ type: 'useItems', amount: stats.itemsUsed.length });
     },
-    [updateProgress, checkAchievements, itemsUsed]
+    [levelId, minecartId, updateProgress]
   );
 
   const handleOreCollected = useCallback(
@@ -119,11 +128,18 @@ export default function Game() {
     [updateProgress]
   );
 
+  const handleTimeUpdate = useCallback((remaining: number, limit: number) => {
+    setTimeState({ remaining, limit });
+  }, []);
+
+  const handleStateChange = useCallback((state: any) => {
+    setCurrentEngineState(state);
+  }, []);
+
   const handleUseItem = useCallback(
     (type: 'shield' | 'magnet' | 'boost') => {
       const success = gameCanvasRef.current?.useItem(type);
       if (success) {
-        setItemsUsed((prev) => prev + 1);
         updateProgress({ type: 'useItems', amount: 1 });
       }
       return success ?? false;
@@ -135,6 +151,8 @@ export default function Game() {
     if (levelConfig && minecartConfig && !isInitialized && gameCanvasRef.current) {
       gameCanvasRef.current.start(levelConfig, minecartConfig);
       setIsInitialized(true);
+      setLastSessionStats(null);
+      setTimeState({});
     }
   }, [levelConfig, minecartConfig, isInitialized]);
 
@@ -143,6 +161,12 @@ export default function Game() {
       setShowPauseMenu(true);
     }
   }, [isPaused]);
+
+  useEffect(() => {
+    return () => {
+      resetGame();
+    };
+  }, [resetGame]);
 
   const handleResume = () => {
     setShowPauseMenu(false);
@@ -156,10 +180,15 @@ export default function Game() {
 
   const handleRestart = () => {
     setShowPauseMenu(false);
-    setItemsUsed(0);
-    if (levelConfig && minecartConfig) {
-      gameCanvasRef.current?.start(levelConfig, minecartConfig);
-    }
+    setLastSessionStats(null);
+    setTimeState({});
+    setIsInitialized(false);
+    setTimeout(() => {
+      if (levelConfig && minecartConfig && gameCanvasRef.current) {
+        gameCanvasRef.current.start(levelConfig, minecartConfig);
+        setIsInitialized(true);
+      }
+    }, 50);
   };
 
   const handleBackToMenu = () => {
@@ -182,10 +211,13 @@ export default function Game() {
   if (!levelConfig || !minecartConfig) {
     return (
       <MainLayout>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-white mb-4">加载错误</h2>
-            <p className="text-white/60 mb-6">无效的关卡或矿车配置</p>
+        <div className="flex items-center justify-center h-full p-6">
+          <div className="text-center max-w-sm">
+            <h2 className="text-2xl font-bold text-white mb-3">加载错误</h2>
+            <p className="text-white/60 mb-2 text-sm">无效的关卡或矿车配置</p>
+            <p className="text-amber-400/80 mb-6 text-xs font-mono break-all">
+              levelId: {levelId} / minecartId: {minecartId}
+            </p>
             <PixelButton variant="primary" onClick={handleBackToMenu}>
               返回主菜单
             </PixelButton>
@@ -204,12 +236,18 @@ export default function Game() {
           onGameOver={handleGameOver}
           onOreCollected={handleOreCollected}
           onScoreChange={handleScoreChange}
+          onTimeUpdate={handleTimeUpdate}
+          onStateChange={handleStateChange}
         />
 
         <GameHUD
           className="z-20"
           onPause={handlePause}
           onResume={handleResume}
+          engineState={currentEngineState}
+          remainingTime={timeState.remaining}
+          timeLimit={timeState.limit}
+          levelType={levelData?.type}
         />
 
         <GameControls
@@ -223,6 +261,7 @@ export default function Game() {
         <GameOverModal
           onRestart={handleRestart}
           onBackToMenu={handleBackToMenu}
+          sessionStats={lastSessionStats || undefined}
         />
 
         <PixelModal

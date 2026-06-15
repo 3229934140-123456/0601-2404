@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import type { Ref } from 'react';
-import { GameEngine, type EngineCallbacks } from '@/game/engine';
+import { GameEngine, type EngineCallbacks, type GameOverStats } from '@/game/engine';
 import type { LevelConfig, Minecart } from '@/types';
 import { useGameStore } from '@/store/useGameStore';
 import { cn } from '@/lib/utils';
@@ -22,9 +22,10 @@ interface GameCanvasProps {
   className?: string;
   onStateChange?: EngineCallbacks['onStateChange'];
   onCollision?: EngineCallbacks['onCollision'];
-  onGameOver?: EngineCallbacks['onGameOver'];
+  onGameOver?: (stats: GameOverStats) => void;
   onScoreChange?: EngineCallbacks['onScoreChange'];
   onOreCollected?: EngineCallbacks['onOreCollected'];
+  onTimeUpdate?: EngineCallbacks['onTimeUpdate'];
   width?: number;
   height?: number;
 }
@@ -37,6 +38,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     onGameOver,
     onScoreChange,
     onOreCollected,
+    onTimeUpdate,
     width = 800,
     height = 600,
   },
@@ -57,9 +59,9 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
       onCollision: (result) => {
         onCollision?.(result);
       },
-      onGameOver: (score, distance, ores) => {
+      onGameOver: (stats) => {
         endGame();
-        onGameOver?.(score, distance, ores);
+        onGameOver?.(stats);
       },
       onScoreChange: (score) => {
         onScoreChange?.(score);
@@ -67,13 +69,16 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
       onOreCollected: (value) => {
         onOreCollected?.(value);
       },
+      onTimeUpdate: (remaining, limit) => {
+        onTimeUpdate?.(remaining, limit);
+      },
     };
 
     engineRef.current = new GameEngine(canvasRef.current, {
       canvasWidth: width,
       canvasHeight: height,
     }, callbacks);
-  }, [width, height, onStateChange, onCollision, onGameOver, onScoreChange, onOreCollected, endGame]);
+  }, [width, height, onStateChange, onCollision, onGameOver, onScoreChange, onOreCollected, onTimeUpdate, endGame]);
 
   const handleResize = useCallback(() => {
     if (!containerRef.current || !engineRef.current) return;

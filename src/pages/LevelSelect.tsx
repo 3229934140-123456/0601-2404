@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Clock,
@@ -10,24 +10,31 @@ import {
   Gem,
   Zap,
   Heart,
+  AlertCircle,
 } from 'lucide-react';
 import MainLayout from '@/components/layout/MainLayout';
 import PageHeader from '@/components/layout/PageHeader';
 import PixelCard from '@/components/ui/PixelCard';
 import PixelButton from '@/components/ui/PixelButton';
+import PixelBadge from '@/components/ui/PixelBadge';
 import MinecartPreview from '@/components/game/MinecartPreview';
-import { usePlayerStore, type MineCart } from '@/store/usePlayerStore';
-import { getNormalLevels, getTimedLevels, type Level } from '@/data/levels';
-import { minecarts as minecartData, type Minecart } from '@/data/minecarts';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import {
+  getLevelsWithUnlockState,
+  getLevelUnlockDescription,
+  checkLevelUnlock,
+  type Level,
+} from '@/data/levels';
 import { cn } from '@/lib/utils';
 
 interface LevelCardProps {
   level: Level;
   isSelected: boolean;
   onClick: () => void;
+  unlockHint?: string;
 }
 
-function LevelCard({ level, isSelected, onClick }: LevelCardProps) {
+function LevelCard({ level, isSelected, onClick, unlockHint }: LevelCardProps) {
   const difficultyStars = Array.from({ length: 5 }, (_, i) => i < level.difficulty);
 
   return (
@@ -44,8 +51,14 @@ function LevelCard({ level, isSelected, onClick }: LevelCardProps) {
       )}
     >
       {!level.unlocked && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl z-10">
-          <Lock className="w-8 h-8 text-white/80" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-2xl z-10 p-4">
+          <Lock className="w-8 h-8 text-white/80 mb-2" />
+          {unlockHint && (
+            <div className="flex items-center gap-1 text-xs text-white/70 text-center">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              <span className="line-clamp-2">{unlockHint}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -57,48 +70,48 @@ function LevelCard({ level, isSelected, onClick }: LevelCardProps) {
 
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-lg font-bold text-white truncate">{level.name}</h3>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className="text-sm font-bold text-white truncate">{level.name}</h3>
             {level.type === 'timed' && (
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-red-500/20 rounded-full flex-shrink-0">
-                <Clock className="w-3 h-3 text-red-400" />
-                <span className="text-xs text-red-400 font-bold">{level.timeLimit}s</span>
-              </div>
+              <PixelBadge variant="error" size="sm">
+                <Clock className="w-2.5 h-2.5 mr-1" />
+                {level.timeLimit}s
+              </PixelBadge>
             )}
           </div>
 
-          <div className="flex items-center gap-1 mb-2">
+          <div className="flex items-center gap-0.5 mb-2">
             {difficultyStars.map((filled, i) => (
               <Star
                 key={i}
                 className={cn(
-                  'w-4 h-4',
+                  'w-3 h-3',
                   filled ? 'text-yellow-400 fill-yellow-400' : 'text-white/20'
                 )}
               />
             ))}
           </div>
 
-          <div className="flex items-center gap-4 text-xs text-white/60">
+          <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
             <div className="flex items-center gap-1">
               <Trophy className="w-3 h-3 text-amber-400" />
               <span>最高: {level.highScore.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-1">
               <Zap className="w-3 h-3 text-blue-400" />
-              <span>速度 x{level.speedMultiplier}</span>
+              <span>x{level.speedMultiplier}</span>
             </div>
           </div>
         </div>
 
         <div
-          className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0"
+          className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: level.background }}
         >
           {level.type === 'timed' ? (
-            <Clock className="w-8 h-8 text-white" />
+            <Clock className="w-7 h-7 text-white" />
           ) : (
-            <Gem className="w-8 h-8 text-white" />
+            <Gem className="w-7 h-7 text-white" />
           )}
         </div>
       </div>
@@ -108,29 +121,66 @@ function LevelCard({ level, isSelected, onClick }: LevelCardProps) {
 
 export default function LevelSelect() {
   const navigate = useNavigate();
-  const { currentMineCartId, selectMineCart, mineCarts } = usePlayerStore();
+  const {
+    mineCarts,
+    currentMineCartId,
+    selectMineCart,
+    unlockedLevels,
+    gameRecords,
+    stats,
+  } = usePlayerStore();
 
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
-  const [selectedMinecartId, setSelectedMinecartId] = useState<string>(currentMineCartId);
+  const [selectedMinecartId, setSelectedMinecartId] =
+    useState<string>(currentMineCartId);
 
-  const normalLevels = getNormalLevels();
-  const timedLevels = getTimedLevels();
+  useEffect(() => {
+    if (!unlockedLevels.includes(selectedMinecartId)) {
+      const unlocked = mineCarts.find((m) => m.unlocked);
+      if (unlocked) {
+        setSelectedMinecartId(unlocked.id);
+      }
+    }
+  }, [mineCarts, selectedMinecartId, unlockedLevels]);
 
-  const selectedLevel = [...normalLevels, ...timedLevels].find(
-    (l) => l.id === selectedLevelId
+  const highScores = useMemo(() => {
+    const scores: Record<string, number> = {};
+    gameRecords.forEach((record) => {
+      if (!scores[record.levelId] || scores[record.levelId] < record.score) {
+        scores[record.levelId] = record.score;
+      }
+    });
+    return scores;
+  }, [gameRecords]);
+
+  const allLevels = useMemo(
+    () => getLevelsWithUnlockState(unlockedLevels, highScores),
+    [unlockedLevels, highScores]
   );
 
+  useEffect(() => {
+    import('@/data/levels').then(({ checkLevelUnlock, levels: rawLevels }) => {
+      rawLevels.forEach((level) => {
+        if (!unlockedLevels.includes(level.id)) {
+          const { canUnlock } = checkLevelUnlock(
+            level.id,
+            highScores,
+            stats.levelsCompleted
+          );
+          if (canUnlock) {
+            usePlayerStore.getState().unlockLevel(level.id);
+          }
+        }
+      });
+    });
+  }, [highScores, stats.levelsCompleted, unlockedLevels]);
+
+  const normalLevels = allLevels.filter((l) => l.type === 'normal');
+  const timedLevels = allLevels.filter((l) => l.type === 'timed');
+
+  const selectedLevel = allLevels.find((l) => l.id === selectedLevelId);
   const selectedMinecart = mineCarts.find((m) => m.id === selectedMinecartId);
   const unlockedMinecarts = mineCarts.filter((m) => m.unlocked);
-
-  const getMinecartColor = (minecartId: string): string => {
-    const data = minecartData.find((m) => m.id === minecartId);
-    return data?.color || '#8B4513';
-  };
-
-  const getMinecartData = (minecartId: string): Minecart | undefined => {
-    return minecartData.find((m) => m.id === minecartId);
-  };
 
   const handleLevelClick = (level: Level) => {
     if (level.unlocked) {
@@ -138,9 +188,10 @@ export default function LevelSelect() {
     }
   };
 
-  const handleMinecartClick = (minecart: MineCart) => {
-    if (minecart.unlocked) {
-      setSelectedMinecartId(minecart.id);
+  const handleMinecartClick = (minecartId: string) => {
+    const minecart = mineCarts.find((m) => m.id === minecartId);
+    if (minecart?.unlocked) {
+      setSelectedMinecartId(minecartId);
     }
   };
 
@@ -167,37 +218,39 @@ export default function LevelSelect() {
       <div className="relative w-full h-full flex flex-col overflow-hidden">
         <PageHeader title="关卡选择" showBack showCoins />
 
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-6xl mx-auto space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          <div className="max-w-6xl mx-auto space-y-6">
             <div>
-              <h2 className="text-xl font-bold text-amber-400 mb-4 flex items-center gap-2">
+              <h2 className="text-base font-bold text-amber-400 mb-3 flex items-center gap-2">
                 <Gem className="w-5 h-5" />
                 普通关卡
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {normalLevels.map((level) => (
                   <LevelCard
                     key={level.id}
                     level={level}
                     isSelected={selectedLevelId === level.id}
                     onClick={() => handleLevelClick(level)}
+                    unlockHint={getLevelUnlockDescription(level)}
                   />
                 ))}
               </div>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
+              <h2 className="text-base font-bold text-red-400 mb-3 flex items-center gap-2">
                 <Clock className="w-5 h-5" />
                 限时关卡
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {timedLevels.map((level) => (
                   <LevelCard
                     key={level.id}
                     level={level}
                     isSelected={selectedLevelId === level.id}
                     onClick={() => handleLevelClick(level)}
+                    unlockHint={getLevelUnlockDescription(level)}
                   />
                 ))}
               </div>
@@ -209,27 +262,28 @@ export default function LevelSelect() {
               title={
                 <div className="flex items-center gap-2">
                   <Heart className="w-5 h-5 text-red-400" />
-                  <span className="text-amber-200">选择矿车</span>
+                  <span className="text-amber-200 text-sm">选择矿车</span>
                 </div>
               }
             >
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {unlockedMinecarts.map((minecart) => (
                   <div
                     key={minecart.id}
-                    onClick={() => handleMinecartClick(minecart)}
+                    onClick={() => handleMinecartClick(minecart.id)}
                     className="cursor-pointer"
                   >
                     <MinecartPreview
-                      color={getMinecartColor(minecart.id)}
+                      color={minecart.color}
                       speed={minecart.speed}
-                      health={minecart.capacity}
+                      health={minecart.health}
                       name={minecart.name}
                       description={minecart.description}
                       unlocked={minecart.unlocked}
+                      price={minecart.price}
                       selected={selectedMinecartId === minecart.id}
                       showStats={false}
-                      scale={1.2}
+                      scale={1.1}
                       animate={selectedMinecartId === minecart.id}
                     />
                   </div>
@@ -237,38 +291,46 @@ export default function LevelSelect() {
               </div>
 
               {selectedMinecart && (
-                <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10">
+                <div className="mt-5 p-4 bg-white/5 rounded-xl border border-white/10">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                    <MinecartPreview
-                      color={getMinecartColor(selectedMinecart.id)}
-                      speed={selectedMinecart.speed}
-                      health={getMinecartData(selectedMinecart.id)?.health || 100}
-                      name={selectedMinecart.name}
-                      description={selectedMinecart.description}
-                      unlocked={true}
-                      selected={true}
-                      showStats={true}
-                      scale={1.5}
-                      animate={true}
-                    />
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white mb-2">
+                    <div className="flex-shrink-0">
+                      <MinecartPreview
+                        color={selectedMinecart.color}
+                        speed={selectedMinecart.speed}
+                        health={selectedMinecart.health}
+                        name={selectedMinecart.name}
+                        description={selectedMinecart.description}
+                        unlocked={true}
+                        selected={true}
+                        showStats={true}
+                        scale={1.4}
+                        animate={true}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-bold text-white mb-2">
                         {selectedMinecart.name}
                       </h3>
-                      <p className="text-sm text-white/60 mb-4">
+                      <p className="text-xs text-white/60 mb-4">
                         {selectedMinecart.description}
                       </p>
                       <div className="flex flex-wrap gap-4">
                         <div className="flex items-center gap-2">
                           <Zap className="w-4 h-4 text-yellow-400" />
-                          <span className="text-sm text-white/70">
-                            速度: <span className="text-yellow-400 font-bold">x{selectedMinecart.speed}</span>
+                          <span className="text-xs text-white/70">
+                            速度:{' '}
+                            <span className="text-yellow-400 font-bold">
+                              x{selectedMinecart.speed}
+                            </span>
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Heart className="w-4 h-4 text-red-400" />
-                          <span className="text-sm text-white/70">
-                            生命: <span className="text-red-400 font-bold">{getMinecartData(selectedMinecart.id)?.health || 100}</span>
+                          <span className="text-xs text-white/70">
+                            生命:{' '}
+                            <span className="text-red-400 font-bold">
+                              {selectedMinecart.health}
+                            </span>
                           </span>
                         </div>
                       </div>
@@ -280,31 +342,38 @@ export default function LevelSelect() {
           </div>
         </div>
 
-        <div className="p-6 bg-stone-800/80 border-t-4 border-amber-600">
+        <div className="p-4 md:p-6 bg-stone-800/80 border-t-4 border-amber-600">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-center sm:text-left">
               {selectedLevel ? (
                 <div>
-                  <p className="text-sm text-white/60">已选择关卡</p>
-                  <p className="text-lg font-bold text-white">{selectedLevel.name}</p>
+                  <p className="text-xs text-white/60">已选择关卡</p>
+                  <p className="text-base font-bold text-white">
+                    {selectedLevel.name}
+                    {selectedLevel.type === 'timed' && (
+                      <span className="ml-2 text-xs text-red-400">
+                        ({selectedLevel.timeLimit}秒限时)
+                      </span>
+                    )}
+                  </p>
                 </div>
               ) : (
-                <p className="text-white/60">请选择一个已解锁的关卡</p>
+                <p className="text-white/60 text-sm">请选择一个已解锁的关卡</p>
               )}
             </div>
 
             <div className="flex gap-3">
               <PixelButton
                 variant="secondary"
-                size="lg"
+                size="md"
                 onClick={handleBack}
               >
                 返回
               </PixelButton>
               <PixelButton
                 variant="primary"
-                size="lg"
-                icon={<Play className="w-5 h-5" />}
+                size="md"
+                icon={<Play className="w-4 h-4" />}
                 onClick={handleStartGame}
                 disabled={!canStartGame}
               >

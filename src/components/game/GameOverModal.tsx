@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Trophy, Gem, MapPin, Coins, RotateCcw, Home, Sparkles } from 'lucide-react';
+import { Trophy, Gem, MapPin, Coins, RotateCcw, Home, Sparkles, Clock, Shield, Zap } from 'lucide-react';
 import { useGameStore } from '@/store/useGameStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { cn } from '@/lib/utils';
+import type { GameOverStats } from '@/game/engine';
+import { getLevelById } from '@/data/levels';
+import type { LevelType } from '@/types';
 
 interface GameOverModalProps {
   className?: string;
   onRestart?: () => void;
   onBackToMenu?: () => void;
+  sessionStats?: GameOverStats & {
+    levelId?: string;
+    minecartId?: string;
+  };
 }
 
 interface StatCardProps {
@@ -15,28 +22,32 @@ interface StatCardProps {
   label: string;
   value: string | number;
   highlight?: boolean;
+  small?: boolean;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ icon, label, value, highlight }) => (
+const StatCard: React.FC<StatCardProps> = ({ icon, label, value, highlight, small }) => (
   <div
     className={cn(
-      'flex items-center gap-3 p-3 rounded-xl',
+      'flex items-center gap-3 rounded-xl',
+      small ? 'p-2.5' : 'p-3',
       highlight ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-white/5 border border-white/10'
     )}
   >
     <div
       className={cn(
-        'w-10 h-10 rounded-lg flex items-center justify-center',
+        'rounded-lg flex items-center justify-center flex-shrink-0',
+        small ? 'w-8 h-8' : 'w-10 h-10',
         highlight ? 'bg-yellow-500/30' : 'bg-white/10'
       )}
     >
       {icon}
     </div>
-    <div className="flex flex-col">
-      <span className="text-xs text-white/60">{label}</span>
+    <div className="flex flex-col min-w-0">
+      <span className="text-[10px] text-white/60 leading-none mb-0.5">{label}</span>
       <span
         className={cn(
-          'text-xl font-bold font-mono',
+          'font-bold font-mono leading-none',
+          small ? 'text-sm' : 'text-xl',
           highlight ? 'text-yellow-400' : 'text-white'
         )}
       >
@@ -50,38 +61,78 @@ export default function GameOverModal({
   className,
   onRestart,
   onBackToMenu,
+  sessionStats,
 }: GameOverModalProps) {
   const { isGameOver, score, distance, oreCount, resetGame } = useGameStore();
-  const { addCoins, addGameRecord, currentMineCartId } = usePlayerStore();
+  const {
+    addCoins,
+    addGameRecord,
+    currentMineCartId,
+    checkAndUnlockAchievements,
+  } = usePlayerStore();
   const [isNewRecord, setIsNewRecord] = useState(false);
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [showContent, setShowContent] = useState(false);
+  const [newAchievements, setNewAchievements] = useState<string[]>([]);
+
+  const finalScore = sessionStats?.score ?? score;
+  const finalDistance = sessionStats?.distance ?? distance;
+  const finalOres = sessionStats?.ores ?? oreCount;
+  const levelType: LevelType = sessionStats?.levelType ?? 'normal';
+  const levelId = sessionStats?.levelId ?? 'level-1';
+  const minecartId = sessionStats?.minecartId ?? currentMineCartId;
 
   useEffect(() => {
-    if (isGameOver) {
-      const coins = Math.floor(score / 10) + oreCount * 5;
+    if (isGameOver && sessionStats) {
+      const coins = Math.floor(finalScore / 10) + finalOres * 5 + (sessionStats.goldOreCount || 0) * 20;
       setEarnedCoins(coins);
 
+      const levelInfo = getLevelById(levelId);
+      const isTimed = levelInfo?.type === 'timed';
       const { gameRecords } = usePlayerStore.getState();
-      const highScore = Math.max(0, ...gameRecords.map((r) => r.score));
-      const newRecord = score > highScore;
+      const recordsForLevel = gameRecords.filter((r) => r.levelId === levelId);
+      const highScore = recordsForLevel.length > 0
+        ? Math.max(...recordsForLevel.map((r) => r.score))
+        : 0;
+      const newRecord = finalScore > highScore;
       setIsNewRecord(newRecord);
+
+      const itemsUsedCount = sessionStats.itemsUsed?.length || 0;
+      const unlocked = checkAndUnlockAchievements({
+        score: finalScore,
+        distance: finalDistance,
+        oreCount: finalOres,
+        goldOreCount: sessionStats.goldOreCount || 0,
+        itemsUsed: itemsUsedCount,
+        damageTaken: sessionStats.damageTaken || 0,
+        levelId: levelId,
+        levelType: isTimed ? 'timed' : 'normal',
+      });
+      setNewAchievements(unlocked.map((a) => a.id));
 
       addCoins(coins);
       addGameRecord({
-        score,
-        distance,
+        score: finalScore,
+        distance: finalDistance,
         coins,
-        oreCount,
-        mineCartId: currentMineCartId,
+        oreCount: finalOres,
+        mineCartId: minecartId,
+        levelId: levelId,
+        levelType: isTimed ? 'timed' : 'normal',
+        itemsUsed: itemsUsedCount,
+        damageTaken: sessionStats.damageTaken || 0,
+        goldOreCount: sessionStats.goldOreCount || 0,
+        timeLimit: sessionStats.timeLimit,
+        timeElapsed: sessionStats.timeElapsed,
       });
 
       const timer = setTimeout(() => setShowContent(true), 100);
       return () => clearTimeout(timer);
     } else {
       setShowContent(false);
+      setNewAchievements([]);
     }
-  }, [isGameOver, score, distance, oreCount, addCoins, addGameRecord, currentMineCartId]);
+  }, [isGameOver, sessionStats, finalScore, finalDistance, finalOres, levelId, minecartId, addCoins, addGameRecord, checkAndUnlockAchievements]);
 
   const handleRestart = () => {
     resetGame();
@@ -97,10 +148,12 @@ export default function GameOverModal({
     return null;
   }
 
+  const levelName = getLevelById(levelId)?.name || '未知关卡';
+
   return (
     <div
       className={cn(
-        'absolute inset-0 z-50 flex items-center justify-center p-4',
+        'absolute inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto',
         'bg-black/80 backdrop-blur-sm',
         'animate-fadeIn',
         className
@@ -108,7 +161,7 @@ export default function GameOverModal({
     >
       <div
         className={cn(
-          'w-full max-w-md bg-gradient-to-b from-gray-900 to-gray-950 rounded-3xl border border-white/10 shadow-2xl overflow-hidden',
+          'w-full max-w-md bg-gradient-to-b from-gray-900 to-gray-950 rounded-3xl border border-white/10 shadow-2xl overflow-hidden my-auto',
           'transform transition-all duration-500',
           showContent ? 'scale-100 opacity-100' : 'scale-90 opacity-0'
         )}
@@ -126,7 +179,14 @@ export default function GameOverModal({
 
           <div className="text-center mt-6">
             <h2 className="text-3xl font-bold text-white mb-1">游戏结束</h2>
-            <p className="text-white/60 text-sm">你的矿车旅程结束了</p>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="text-white/60 text-sm">{levelName}</span>
+              {levelType === 'timed' && (
+                <span className="px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded-full border border-red-500/30 font-bold">
+                  ⏱ 限时挑战
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -134,26 +194,74 @@ export default function GameOverModal({
           <StatCard
             icon={<Trophy className="w-5 h-5 text-yellow-400" />}
             label="最终得分"
-            value={score.toLocaleString()}
+            value={finalScore.toLocaleString()}
             highlight={isNewRecord}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <StatCard
-              icon={<MapPin className="w-5 h-5 text-blue-400" />}
+              icon={<MapPin className="w-4 h-4 text-blue-400" />}
               label="行驶距离"
-              value={distance >= 1000 ? `${(distance / 1000).toFixed(1)}km` : `${Math.floor(distance)}m`}
+              value={finalDistance >= 1000 ? `${(finalDistance / 1000).toFixed(1)}km` : `${Math.floor(finalDistance)}m`}
+              small
             />
             <StatCard
-              icon={<Gem className="w-5 h-5 text-cyan-400" />}
+              icon={<Gem className="w-4 h-4 text-cyan-400" />}
               label="收集矿石"
-              value={oreCount}
+              value={finalOres}
+              small
             />
+            {sessionStats?.goldOreCount !== undefined && sessionStats.goldOreCount > 0 && (
+              <StatCard
+                icon={<Sparkles className="w-4 h-4 text-amber-400" />}
+                label="金矿石"
+                value={sessionStats.goldOreCount}
+                small
+              />
+            )}
+            {sessionStats?.timeElapsed !== undefined && (
+              <StatCard
+                icon={<Clock className="w-4 h-4 text-purple-400" />}
+                label="用时"
+                value={`${Math.floor(sessionStats.timeElapsed / 60)}:${Math.floor(sessionStats.timeElapsed % 60).toString().padStart(2, '0')}`}
+                small
+              />
+            )}
+            {sessionStats?.noDamage && (
+              <StatCard
+                icon={<Shield className="w-4 h-4 text-green-400" />}
+                label="无伤通关"
+                value="✓ 完美"
+                small
+              />
+            )}
+            {sessionStats && sessionStats.itemsUsed && sessionStats.itemsUsed.length > 0 && (
+              <StatCard
+                icon={<Zap className="w-4 h-4 text-yellow-400" />}
+                label="使用道具"
+                value={sessionStats.itemsUsed.length}
+                small
+              />
+            )}
           </div>
+
+          {newAchievements.length > 0 && (
+            <div className="p-3 bg-purple-500/20 rounded-xl border border-purple-500/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Trophy className="w-4 h-4 text-purple-400" />
+                <span className="text-xs font-bold text-purple-300">
+                  解锁 {newAchievements.length} 个新成就！
+                </span>
+              </div>
+              <div className="text-[10px] text-white/60">
+                前往成就图鉴领取奖励
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-center gap-2 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl border border-yellow-500/30">
             <Coins className="w-6 h-6 text-yellow-400" />
-            <span className="text-white/70">获得金币</span>
+            <span className="text-white/70 text-sm">获得金币</span>
             <span className="text-2xl font-bold text-yellow-400 font-mono">
               +{earnedCoins}
             </span>

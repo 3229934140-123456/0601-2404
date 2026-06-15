@@ -26,11 +26,16 @@ export interface EngineState {
   score: number;
   distance: number;
   ores: number;
+  goldOreCount: number;
+  damageTaken: number;
   health: number;
   currentTrack: number;
   speed: number;
   activeEffects: ActiveEffect[];
   currentLevelId: number;
+  remainingTime?: number;
+  timeLimit?: number;
+  levelType?: 'normal' | 'timed';
 }
 
 export interface MinecartState {

@@ -1,498 +1,537 @@
 import { useState, useMemo } from 'react';
-import { Trophy, BookOpen, Lock, Coins, Pickaxe, Gem, MapPin, Map, Compass, Award, Gauge, Sparkles, ShieldCheck, Crown, ChevronRight } from 'lucide-react';
+import { Trophy, Book, Star, Award, Coins, Gem, Lock, Pickaxe, MapPin, Map, Compass, Crown, Gauge, Sparkles, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import PixelCard from '@/components/ui/PixelCard';
 import PixelButton from '@/components/ui/PixelButton';
 import PixelBadge from '@/components/ui/PixelBadge';
+import PixelProgress from '@/components/ui/PixelProgress';
 import PixelModal from '@/components/ui/PixelModal';
+import AchievementNotification from '@/components/game/AchievementNotification';
 import { usePlayerStore } from '@/store/usePlayerStore';
-import { achievements as allAchievements } from '@/data/achievements';
+import { achievements as achievementsData, type AchievementCategory } from '@/data/achievements';
 import { cn } from '@/lib/utils';
 
-type TabType = 'badges' | 'story';
+type ViewMode = 'badges' | 'story';
 
-interface AchievementDetail {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  reward: number;
-  unlocked: boolean;
-  category: string;
-  condition: {
-    type: string;
-    target: number;
-    current: number;
-  };
-}
-
-interface StoryChapter {
+interface UnlockChapterModal {
   id: number;
   title: string;
-  description: string;
-  requiredAchievements: number;
-  panels: string[];
+  content: string;
+  color: string;
 }
 
-const storyChapters: StoryChapter[] = [
-  {
-    id: 1,
-    title: '第一章：初入矿洞',
-    description: '你是一名年轻的矿工，怀揣着成为传奇矿工的梦想，踏入了神秘的地下矿洞...',
-    requiredAchievements: 1,
-    panels: [
-      '在一个阳光明媚的早晨，你背起工具，踏入了传说中的矿洞入口。',
-      '洞壁上闪烁着微弱的矿石光芒，空气中弥漫着潮湿的气息。',
-      '你深吸一口气，握紧了手中的镐子，开始了你的冒险之旅。',
-    ],
-  },
-  {
-    id: 2,
-    title: '第二章：矿石收藏家',
-    description: '你开始收集各种珍贵的矿石，你的技艺日益精进...',
-    requiredAchievements: 3,
-    panels: [
-      '日子一天天过去，你收集的矿石越来越多。',
-      '你发现了黄金矿石的秘密，它们比普通矿石更加珍贵。',
-      '矿洞深处似乎有什么在召唤着你，那里有更多的宝藏等待发现。',
-    ],
-  },
-  {
-    id: 3,
-    title: '第三章：速度与激情',
-    description: '你的矿车速度越来越快，你开始挑战更远的距离...',
-    requiredAchievements: 6,
-    panels: [
-      '你升级了矿车，速度越来越快。',
-      '矿洞的轨道延伸向更深的地方，你看到了从未见过的景象。',
-      '远处传来神秘的轰鸣声，似乎有什么古老的存在在等待着你。',
-    ],
-  },
-  {
-    id: 4,
-    title: '第四章：道具大师',
-    description: '你学会了使用各种道具，你的冒险变得更加顺利...',
-    requiredAchievements: 9,
-    panels: [
-      '你发现了古老的道具商店，那里有各种神奇的道具。',
-      '护盾保护你免受伤害，磁铁帮你收集矿石。',
-      '你开始巧妙地运用这些道具，挑战更加危险的区域。',
-    ],
-  },
-  {
-    id: 5,
-    title: '第五章：传奇之路',
-    description: '你的名字开始在矿工之间传颂...',
-    requiredAchievements: 12,
-    panels: [
-      '你的分数越来越高，其他矿工开始谈论你的传奇。',
-      '你获得了"传奇矿工"的称号，矿洞中的每个角落都留下了你的足迹。',
-      '但你知道，真正的挑战才刚刚开始...',
-    ],
-  },
-  {
-    id: 6,
-    title: '终章：矿洞之主',
-    description: '你成为了矿洞的主人，揭开了矿洞最深的秘密...',
-    requiredAchievements: 15,
-    panels: [
-      '你终于到达了矿洞的最深处，那里有一个巨大的矿车等待着你。',
-      '原来矿洞的守护者出现了，它是矿洞的灵魂。',
-      '你成为了新的守护者，传承着矿工的传说，永远守护着这片矿洞。',
-    ],
-  },
-];
-
-const getAchievementIcon = (iconName: string, unlocked: boolean) => {
-  const iconClass = unlocked ? 'text-yellow-400' : 'text-gray-500';
-  const iconMap: Record<string, React.ReactNode> = {
-    Pickaxe: <Pickaxe className={cn('w-8 h-8', iconClass)} />,
-    Gem: <Gem className={cn('w-8 h-8', iconClass)} />,
-    Trophy: <Trophy className={cn('w-8 h-8', iconClass)} />,
-    Crown: <Crown className={cn('w-8 h-8', iconClass)} />,
-    MapPin: <MapPin className={cn('w-8 h-8', iconClass)} />,
-    Map: <Map className={cn('w-8 h-8', iconClass)} />,
-    Compass: <Compass className={cn('w-8 h-8', iconClass)} />,
-    Award: <Award className={cn('w-8 h-8', iconClass)} />,
-    Gauge: <Gauge className={cn('w-8 h-8', iconClass)} />,
-    Sparkles: <Sparkles className={cn('w-8 h-8', iconClass)} />,
-    ShieldCheck: <ShieldCheck className={cn('w-8 h-8', iconClass)} />,
-  };
-  return iconMap[iconName] || <Trophy className={cn('w-8 h-8', iconClass)} />;
-};
-
-const getCategoryBadge = (category: string) => {
-  const categoryMap: Record<string, { label: string; variant: 'success' | 'warning' | 'error' | 'info' }> = {
-    collection: { label: '收集', variant: 'success' },
-    score: { label: '分数', variant: 'warning' },
-    distance: { label: '距离', variant: 'info' },
-    special: { label: '特殊', variant: 'error' },
-  };
-  return categoryMap[category] || { label: category, variant: 'info' };
+const iconMap: Record<string, React.ReactNode> = {
+  Pickaxe: <Pickaxe className="w-6 h-6" />,
+  Gem: <Gem className="w-6 h-6" />,
+  Trophy: <Trophy className="w-6 h-6" />,
+  Crown: <Crown className="w-6 h-6" />,
+  MapPin: <MapPin className="w-6 h-6" />,
+  Map: <Map className="w-6 h-6" />,
+  Compass: <Compass className="w-6 h-6" />,
+  Award: <Award className="w-6 h-6" />,
+  Gauge: <Gauge className="w-6 h-6" />,
+  Sparkles: <Sparkles className="w-6 h-6" />,
+  ShieldCheck: <ShieldCheck className="w-6 h-6" />,
 };
 
 export default function Achievements() {
-  const [activeTab, setActiveTab] = useState<TabType>('badges');
-  const [selectedAchievement, setSelectedAchievement] = useState<AchievementDetail | null>(null);
-  const [selectedChapter, setSelectedChapter] = useState<StoryChapter | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('badges');
+  const [selectedCategory, setSelectedCategory] = useState<AchievementCategory | 'all'>('all');
+  const [chapterModal, setChapterModal] = useState<UnlockChapterModal | null>(null);
+  const [achievementNotification, setAchievementNotification] = useState<{
+    name: string;
+    description: string;
+    icon: string;
+    reward: number;
+  } | null>(null);
 
-  const { achievements: storeAchievements } = usePlayerStore();
-
-  const getAchievementUnlocked = (achievementId: string): boolean => {
-    const storeId = achievementId.replace('achievement-', '');
-    const storeAchievement = storeAchievements.find(a => a.id === storeId);
-    if (storeAchievement) {
-      return storeAchievement.unlocked;
-    }
-    const dataAchievement = allAchievements.find(a => a.id === achievementId);
-    return dataAchievement?.unlocked || false;
-  };
-
-  const getAchievementProgress = (achievementId: string): { current: number; target: number } => {
-    const dataAchievement = allAchievements.find(a => a.id === achievementId);
-    if (!dataAchievement) return { current: 0, target: 1 };
-    const storeId = achievementId.replace('achievement-', '');
-    const storeAchievement = storeAchievements.find(a => a.id === storeId);
-    if (storeAchievement && storeAchievement.unlocked) {
-      return { current: dataAchievement.condition.target, target: dataAchievement.condition.target };
-    }
-    return { current: dataAchievement.condition.current, target: dataAchievement.condition.target };
-  };
+  const {
+    achievements,
+    stats,
+  } = usePlayerStore();
 
   const achievementStats = useMemo(() => {
-    const total = allAchievements.length;
-    const unlocked = allAchievements.filter(a => getAchievementUnlocked(a.id)).length;
-    return { unlocked, total, percentage: Math.round((unlocked / total) * 100) };
-  }, [storeAchievements]);
+    const totalCount = achievementsData.length;
+    const unlockedCount = achievements.filter((a) => a.unlocked).length;
+    const progressPercentage = Math.round((unlockedCount / totalCount) * 100);
+    const countByCategory = (cat: AchievementCategory) => {
+      const total = achievementsData.filter((a) => a.category === cat).length;
+      const unlocked = achievements.filter((a) => {
+        const data = achievementsData.find((d) => d.id === a.id);
+        return a.unlocked && data?.category === cat;
+      }).length;
+      return { total, unlocked };
+    };
+    const collection = countByCategory('collection');
+    const score = countByCategory('score');
+    const distance = countByCategory('distance');
+    const special = countByCategory('special');
+    return {
+      totalCount,
+      unlockedCount,
+      progressPercentage,
+      collectibleCount: collection.total,
+      unlockedCollectible: collection.unlocked,
+      scoreCount: score.total,
+      unlockedScore: score.unlocked,
+      distanceCount: distance.total,
+      unlockedDistance: distance.unlocked,
+      specialCount: special.total,
+      unlockedSpecial: special.unlocked,
+    };
+  }, [achievements]);
 
-  const getChapterUnlocked = (chapter: StoryChapter): boolean => {
-    return achievementStats.unlocked >= chapter.requiredAchievements;
+  const categoryStats: Record<
+    AchievementCategory,
+    { label: string; unlocked: number; total: number; icon: any; color: string }
+  > = {
+    collection: {
+      label: '收集',
+      unlocked: achievementStats.unlockedCollectible,
+      total: achievementStats.collectibleCount,
+      icon: Gem,
+      color: 'from-cyan-500 to-blue-500',
+    },
+    score: {
+      label: '分数',
+      unlocked: achievementStats.unlockedScore,
+      total: achievementStats.scoreCount,
+      icon: Star,
+      color: 'from-amber-500 to-orange-500',
+    },
+    distance: {
+      label: '距离',
+      unlocked: achievementStats.unlockedDistance,
+      total: achievementStats.distanceCount,
+      icon: Award,
+      color: 'from-green-500 to-emerald-500',
+    },
+    special: {
+      label: '特殊',
+      unlocked: achievementStats.unlockedSpecial,
+      total: achievementStats.specialCount,
+      icon: Trophy,
+      color: 'from-purple-500 to-pink-500',
+    },
+  };
+
+  const chapterData = [
+    {
+      id: 1,
+      title: '第一章：矿洞初探',
+      content: '传说在群山深处有一座古老的金矿，里面埋藏着无数的财富。勇敢的矿工，你驾驶着你的矿车，开始了冒险之旅。山洞的入口处漆黑一片，只有矿灯照亮前方的轨道...',
+      color: 'from-cyan-600 to-blue-700',
+      required: 3,
+    },
+    {
+      id: 2,
+      title: '第二章：幽暗隧道',
+      content: '深入矿洞后，你发现了更多的秘密。墙上的古老壁画描绘着一个失落的文明，他们曾在这里开采出了惊人的宝藏。蝙蝠在头顶飞过，塌方的警告声不时响起，但你没有退缩...',
+      color: 'from-indigo-600 to-purple-700',
+      required: 6,
+    },
+    {
+      id: 3,
+      title: '第三章：熔岩深渊',
+      content: '温度开始升高，墙壁变得灼热发红。你来到了传说中的熔岩深渊，这里的金矿品质最高，但危险也成倍增加。滚烫的岩浆从裂缝中涌出，红色的光芒照亮了整个通道...',
+      color: 'from-red-600 to-orange-700',
+      required: 9,
+    },
+    {
+      id: 4,
+      title: '第四章：水晶秘境',
+      content: '穿过熔岩区，你进入了一个如梦如幻的水晶秘境。巨大的水晶散发着七彩的光芒，空气中弥漫着神奇的能量。传说这里的水晶能够赋予矿车非凡的能力...',
+      color: 'from-pink-600 to-rose-700',
+      required: 12,
+    },
+    {
+      id: 5,
+      title: '终章：黄金之心',
+      content: '在最深处，你终于找到了传说中的黄金之心——一颗巨大的纯金矿石，蕴含着整个矿洞的能量。它见证了无数矿工的努力与汗水，现在，这份荣耀属于你！恭喜你成为传奇矿工！',
+      color: 'from-amber-500 to-yellow-600',
+      required: achievementStats.totalCount,
+    },
+  ];
+
+  const storyChapters = useMemo(() => {
+    return chapterData.map((chapter) => ({
+      ...chapter,
+      unlocked: achievementStats.unlockedCount >= chapter.required,
+      reward: { coins: chapter.id * 100 },
+    }));
+  }, [achievementStats.unlockedCount, achievementStats.totalCount]);
+
+  function getAchievementProgress(id: string): { current: number; target: number; percentage: number } {
+    const storeAch = achievements.find((a) => a.id === id);
+    const dataAch = achievementsData.find((a) => a.id === id);
+    if (!dataAch) return { current: 0, target: 1, percentage: 0 };
+    const target = dataAch.condition.target;
+    let current = storeAch?.condition.current ?? 0;
+
+    switch (dataAch.condition.type) {
+      case 'collectOre':
+        current = Math.min(stats.totalOreCollected, target);
+        break;
+      case 'collectGoldOre':
+        current = Math.min(stats.totalGoldOreCollected, target);
+        break;
+      case 'totalScore':
+        current = Math.min(stats.totalScore, target);
+        break;
+      case 'totalDistance':
+        current = Math.min(Math.floor(stats.totalDistance), target);
+        break;
+      case 'clearLevels':
+        current = Math.min(stats.levelsCompleted.filter(id => id.startsWith('level-')).length, target);
+        break;
+      case 'purchaseMinecart':
+        current = Math.min(stats.minecartsPurchased, target);
+        break;
+      default:
+        current = storeAch?.condition.current ?? 0;
+    }
+    const percentage = Math.min(100, Math.round((current / target) * 100));
+    return { current, target, percentage };
+  }
+
+  const filteredAchievements = useMemo(() => {
+    const list = achievementsData.map((dataItem) => {
+      const storeItem = achievements.find((a) => a.id === dataItem.id);
+      const progress = getAchievementProgress(dataItem.id);
+      return {
+        ...dataItem,
+        unlocked: storeItem?.unlocked || false,
+        progress,
+      };
+    });
+    if (selectedCategory === 'all') return list;
+    return list.filter((a) => a.category === selectedCategory);
+  }, [achievements, selectedCategory, stats]);
+
+  const handleClaimReward = (achievementId: string) => {
+    const ach = achievementsData.find((a) => a.id === achievementId);
+    const storeAch = achievements.find((a) => a.id === achievementId);
+    if (ach && storeAch?.unlocked) {
+      setAchievementNotification({
+        name: ach.name,
+        description: ach.description,
+        icon: ach.icon,
+        reward: ach.reward,
+      });
+      setTimeout(() => setAchievementNotification(null), 4000);
+    }
+  };
+
+  const handleChapterClaim = (chapter: typeof storyChapters[0]) => {
+    if (!chapter.unlocked) return;
+    setChapterModal({
+      id: chapter.id,
+      title: chapter.title,
+      content: chapter.content,
+      color: chapter.color,
+    });
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-stone-900 via-stone-800 to-stone-900">
       <PageHeader title="成就图鉴" showBack showCoins />
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="mb-6">
-          <PixelCard className="mb-4">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-500/20 rounded-lg">
-                <Trophy className="w-10 h-10 text-amber-400" />
+      <div className="container mx-auto px-4 py-4 md:py-6">
+        <PixelCard className="mb-4 bg-gradient-to-r from-purple-900/50 to-pink-900/50 border-purple-500/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-amber-500/20 rounded-xl">
+                <Trophy className="w-6 h-6 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">成就进度</h3>
-                <p className="text-sm text-white/60">
-                  已解锁 <span className="text-amber-400 font-bold">{achievementStats.unlocked}</span> / {achievementStats.total} 个成就
-                </p>
-              </div>
-              </div>
-              <div className="w-full md:w-64">
-                <div className="flex justify-between text-xs text-white/60 mb-1">
-                  <span>进度</span>
-                  <span>{achievementStats.percentage}%</span>
-                </div>
-                <div className="h-3 bg-stone-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500"
-                    style={{ width: `${achievementStats.percentage}%` }}
-                  />
-                </div>
+                <h2 className="text-base font-bold text-white">成就进度</h2>
+                <p className="text-xs text-white/60">继续游戏解锁更多成就</p>
               </div>
             </div>
-          </PixelCard>
-        </div>
+            <div className="text-right">
+              <div className="text-xl font-bold text-amber-400">
+                {achievementStats.unlockedCount}
+                <span className="text-sm text-white/60">/{achievementStats.totalCount}</span>
+              </div>
+              <div className="text-xs text-white/60">已解锁</div>
+            </div>
+          </div>
+          <PixelProgress
+            value={achievementStats.progressPercentage}
+            showLabel
+            color="tan"
+          />
+        </PixelCard>
 
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-5">
           <PixelButton
-            variant={activeTab === 'badges' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('badges')}
+            variant={viewMode === 'badges' ? 'primary' : 'secondary'}
+            onClick={() => setViewMode('badges')}
             className="flex-1"
+            size="sm"
           >
             <Trophy className="w-4 h-4" />
             成就徽章
           </PixelButton>
           <PixelButton
-            variant={activeTab === 'story' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('story')}
+            variant={viewMode === 'story' ? 'primary' : 'secondary'}
+            onClick={() => setViewMode('story')}
             className="flex-1"
+            size="sm"
           >
-            <BookOpen className="w-4 h-4" />
+            <Book className="w-4 h-4" />
             像素剧情
           </PixelButton>
         </div>
 
-        {activeTab === 'badges' && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {allAchievements.map((achievement) => {
-              const unlocked = getAchievementUnlocked(achievement.id);
-              const progress = getAchievementProgress(achievement.id);
-              const categoryInfo = getCategoryBadge(achievement.category);
+        {viewMode === 'badges' && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+              {(Object.keys(categoryStats) as AchievementCategory[]).map((cat) => {
+                const stat = categoryStats[cat];
+                const CatIcon = stat.icon;
+                const isActive = selectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(isActive ? 'all' : cat)}
+                    className={cn(
+                      'p-3 rounded-xl transition-all text-left',
+                      isActive
+                        ? `bg-gradient-to-br ${stat.color} shadow-lg`
+                        : 'bg-pixel-card-bg hover:bg-pixel-card-hover border border-pixel-border'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <CatIcon className={cn('w-4 h-4', isActive ? 'text-white' : 'text-amber-400')} />
+                      <span className={cn('text-xs font-bold', isActive ? 'text-white' : 'text-white/80')}>
+                        {stat.label}
+                      </span>
+                    </div>
+                    <div className={cn('text-lg font-bold', isActive ? 'text-white' : 'text-white')}>
+                      {stat.unlocked}/{stat.total}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-              return (
+            {selectedCategory !== 'all' && (
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs text-white/60">
+                  筛选: {categoryStats[selectedCategory].label}类成就
+                </span>
+                <button
+                  onClick={() => setSelectedCategory('all')}
+                  className="text-xs text-amber-400 hover:text-amber-300"
+                >
+                  查看全部
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredAchievements.map((achievement) => (
                 <PixelCard
                   key={achievement.id}
                   className={cn(
-                  'cursor-pointer transition-all duration-300',
-                  unlocked
-                    ? 'hover:shadow-lg hover:scale-105'
-                    : 'opacity-70 hover:opacity-90'
-                )}
-                  onClick={() => setSelectedAchievement({
-                    id: achievement.id,
-                    name: achievement.name,
-                    description: achievement.description,
-                    icon: achievement.icon,
-                    reward: achievement.reward,
-                    unlocked,
-                    category: achievement.category,
-                    condition: {
-                      type: achievement.condition.type,
-                      target: achievement.condition.target,
-                      current: progress.current,
-                    },
-                  })}
+                    'transition-all',
+                    achievement.unlocked && 'shadow-lg shadow-amber-500/20 border-amber-500/30'
+                  )}
                 >
-                  <div className="flex flex-col items-center text-center">
-                    <div className={cn(
-                      'p-4 rounded-xl mb-3',
-                      unlocked
-                        ? 'bg-gradient-to-br from-amber-500/30 to-yellow-500/20'
-                        : 'bg-stone-700/50'
-                    )}>
-                      {getAchievementIcon(achievement.icon, unlocked)}
+                  <div className="flex gap-3">
+                    <div
+                      className={cn(
+                        'w-14 h-14 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold',
+                        achievement.unlocked
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md'
+                          : 'bg-gray-700 text-gray-400 grayscale'
+                      )}
+                    >
+                      {iconMap[achievement.icon] || <Trophy className="w-6 h-6" />}
                     </div>
-
-                    <h4 className={cn(
-                      'text-sm font-bold mb-1',
-                      unlocked ? 'text-white' : 'text-gray-400'
-                    )}>
-                      {achievement.name}
-                    </h4>
-
-                    <PixelBadge variant={categoryInfo.variant} size="sm" className="mb-2">
-                      {categoryInfo.label}
-                    </PixelBadge>
-
-                    {!unlocked && (
-                      <div className="w-full mt-2">
-                        <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500 transition-all duration-300"
-                            style={{ width: `${(progress.current / progress.target) * 100}%` }}
-                          />
-                        </div>
-                        <div className="text-xs text-white/40 mt-1">
-                          {progress.current} / {progress.target}
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <h3
+                          className={cn(
+                            'text-sm font-bold truncate',
+                            achievement.unlocked ? 'text-white' : 'text-white/50'
+                          )}
+                        >
+                          {achievement.name}
+                        </h3>
+                        {achievement.unlocked && <PixelBadge variant="warning" size="sm">已完成</PixelBadge>}
                       </div>
-                    )}
-
-                    {unlocked && (
-                      <div className="flex items-center gap-1 text-amber-400 text-xs mt-2">
-                        <Coins className="w-3 h-3" />
-                        <span>+{achievement.reward}</span>
+                      <p className="text-xs text-white/60 mb-2 line-clamp-1">
+                        {achievement.description}
+                      </p>
+                      <PixelProgress
+                        value={achievement.progress.percentage}
+                        showLabel
+                        color={achievement.unlocked ? 'green' : 'blue'}
+                        className="mb-2"
+                      />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs">
+                          {achievement.reward > 0 && (
+                            <span className="flex items-center gap-1 text-amber-400">
+                              <Coins className="w-3 h-3" />
+                              {achievement.reward}
+                            </span>
+                          )}
+                        </div>
+                        {achievement.unlocked ? (
+                          <PixelButton
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleClaimReward(achievement.id)}
+                          >
+                            查看奖励
+                          </PixelButton>
+                        ) : (
+                          <PixelBadge variant="info" size="sm">未完成</PixelBadge>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </PixelCard>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
-        {activeTab === 'story' && (
+        {viewMode === 'story' && (
           <div className="space-y-4">
-            {storyChapters.map((chapter) => {
-              const unlocked = getChapterUnlocked(chapter);
-              const progress = Math.min(100, (achievementStats.unlocked / chapter.requiredAchievements) * 100);
-
-              return (
+            <div className="grid grid-cols-1 gap-4">
+              {storyChapters.map((chapter, index) => (
                 <PixelCard
                   key={chapter.id}
                   className={cn(
-                    'cursor-pointer transition-all duration-300',
-                    unlocked
-                      ? 'hover:shadow-lg'
-                      : 'opacity-60'
+                    'overflow-hidden transition-all',
+                    chapter.unlocked && 'shadow-lg border-amber-500/30'
                   )}
-                  onClick={() => unlocked && setSelectedChapter(chapter)}
                 >
-                  <div className="flex items-start gap-4">
-                    <div className={cn(
-                      'w-16 h-16 flex-shrink-0 rounded-xl flex items-center justify-center',
-                      unlocked
-                        ? 'bg-gradient-to-br from-amber-500/30 to-yellow-500/20'
-                        : 'bg-stone-700/50'
-                    )}>
-                      {unlocked ? (
-                        <span className="text-3xl">📖</span>
-                      ) : (
-                        <Lock className="w-8 h-8 text-gray-500" />
+                  <div className="flex flex-col md:flex-row">
+                    <div
+                      className={cn(
+                        'w-full md:w-48 h-32 md:h-auto flex items-center justify-center relative overflow-hidden -mx-5 -mt-5 md:mx-0 md:mt-0 md:mr-5 mb-4 md:mb-0',
+                        chapter.unlocked
+                          ? `bg-gradient-to-br ${chapter.color}`
+                          : 'bg-gray-800'
                       )}
-                    </div>
-
-                    <div className="flex-grow">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className={cn(
-                          'text-lg font-bold',
-                          unlocked ? 'text-white' : 'text-gray-400'
-                        )}>
-                          {chapter.title}
-                        </h3>
-                        {unlocked ? (
-                          <PixelBadge variant="success" size="sm">
-                            已解锁
-                          </PixelBadge>
-                        ) : (
-                          <PixelBadge variant="warning" size="sm">
-                            需要 {chapter.requiredAchievements} 个成就
-                          </PixelBadge>
-                        )}
-                      </div>
-
-                      <p className={cn(
-                        'text-sm mb-2',
-                        unlocked ? 'text-white/70' : 'text-gray-500'
-                      )}>
-                        {unlocked ? chapter.description : '解锁更多成就以查看此章节...'}
-                      </p>
-
-                      {!unlocked && (
-                        <div className="w-full max-w-xs">
-                          <div className="h-2 bg-stone-700 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-amber-500 transition-all duration-300"
-                              style={{ width: `${progress}%` }}
-                            />
+                      style={{ borderTopLeftRadius: '0.75rem', borderTopRightRadius: '0.75rem', borderBottomLeftRadius: 0 }}
+                    >
+                      {chapter.unlocked ? (
+                        <div className="text-center">
+                          <div className="text-5xl font-black text-white/90 mb-1">
+                            {index + 1}
+                          </div>
+                          <div className="text-xs text-white/70 font-bold">
+                            CHAPTER
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <Lock className="w-10 h-10 text-gray-600 mx-auto mb-1" />
+                          <div className="text-xs text-gray-500 font-bold">
+                            🔒 未解锁
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {unlocked && (
-                      <ChevronRight className="w-6 h-6 text-white/40" />
-                    )}
+                    <div className="flex-1 flex flex-col">
+                      <h3
+                        className={cn(
+                          'text-sm font-bold mb-1',
+                          chapter.unlocked ? 'text-white' : 'text-white/40'
+                        )}
+                      >
+                        {chapter.title}
+                      </h3>
+                      <p
+                        className={cn(
+                          'text-xs mb-3 flex-grow leading-relaxed',
+                          chapter.unlocked ? 'text-white/70' : 'text-white/30'
+                        )}
+                      >
+                        {chapter.unlocked
+                          ? chapter.content.slice(0, 50) + '...'
+                          : `解锁 ${chapter.required} 个成就后可阅读此章节`}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="flex items-center gap-1 text-amber-400">
+                            <Coins className="w-3 h-3" />
+                            {chapter.reward.coins}
+                          </span>
+                        </div>
+                        {chapter.unlocked ? (
+                          <PixelButton
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleChapterClaim(chapter)}
+                          >
+                            阅读章节
+                          </PixelButton>
+                        ) : (
+                          <PixelButton variant="secondary" size="sm" disabled>
+                            <Lock className="w-3 h-3" />
+                            {chapter.required}成就解锁
+                          </PixelButton>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </PixelCard>
-              );
-            })}
+              ))}
+            </div>
           </div>
         )}
       </div>
 
       <PixelModal
-        isOpen={!!selectedAchievement}
-        onClose={() => setSelectedAchievement(null)}
-        title="成就详情"
+        isOpen={!!chapterModal}
+        onClose={() => setChapterModal(null)}
+        title={chapterModal?.title || ''}
       >
-        {selectedAchievement && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <div className={cn(
-                'p-4 rounded-xl',
-                selectedAchievement.unlocked
-                  ? 'bg-gradient-to-br from-amber-500/30 to-yellow-500/20'
-                  : 'bg-stone-700/50'
-              )}>
-                {getAchievementIcon(selectedAchievement.icon, selectedAchievement.unlocked)}
-              </div>
-              <div>
-                <h3 className={cn(
-                  'text-xl font-bold',
-                  selectedAchievement.unlocked ? 'text-pixel-brown-dark' : 'text-gray-500'
-                )}>
-                  {selectedAchievement.name}
-                </h3>
-                <PixelBadge
-                  variant={getCategoryBadge(selectedAchievement.category).variant}
-                  size="sm"
-                >
-                  {getCategoryBadge(selectedAchievement.category).label}
-                </PixelBadge>
+        {chapterModal && (
+          <div className="space-y-5">
+            <div
+              className={`w-full h-44 rounded-xl bg-gradient-to-br ${chapterModal.color} flex items-center justify-center`}
+            >
+              <div className="text-center">
+                <Book className="w-14 h-14 text-white/90 mx-auto mb-2" />
+                <div className="text-white/80 text-sm">像素剧情</div>
               </div>
             </div>
-
-            <p className="text-pixel-brown-dark/80">
-              {selectedAchievement.description}
-            </p>
-
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-              <span className="text-pixel-brown-dark/60">完成进度</span>
-              <span className="text-pixel-brown-dark font-bold">
-                {selectedAchievement.condition.current} / {selectedAchievement.condition.target}
-              </span>
-              </div>
-              <div className="h-3 bg-stone-200 rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full transition-all duration-500',
-                    selectedAchievement.unlocked
-                      ? 'bg-gradient-to-r from-green-500 to-green-400'
-                      : 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                  )}
-                  style={{ width: `${(selectedAchievement.condition.current / selectedAchievement.condition.target) * 100}%` }}
-                />
-              </div>
+            <div className="px-2">
+              <p className="text-sm text-pixel-brown-dark leading-relaxed whitespace-pre-line">
+                {chapterModal.content}
+              </p>
             </div>
-
-            <div className="flex items-center justify-between p-3 bg-amber-500/10 rounded-lg">
-              <span className="text-pixel-brown-dark/70">奖励</span>
-              <div className="flex items-center gap-2 text-amber-600">
-                <Coins className="w-5 h-5" />
-                <span className="font-bold text-lg">+{selectedAchievement.reward}</span>
-              </div>
-            </div>
-
-            {selectedAchievement.unlocked && (
-              <div className="text-center py-2">
-                <PixelBadge variant="success" glow>
-                  ✓ 已解锁
-                </PixelBadge>
-              </div>
-            )}
-          </div>
-        )}
-      </PixelModal>
-
-      <PixelModal
-        isOpen={!!selectedChapter}
-        onClose={() => setSelectedChapter(null)}
-        title={selectedChapter?.title}
-        className="max-w-2xl"
-      >
-        {selectedChapter && (
-          <div className="space-y-6">
-          <p className="text-pixel-brown-dark/80 text-center italic">
-            {selectedChapter.description}
-          </p>
-
-          <div className="space-y-4">
-            {selectedChapter.panels.map((panel, index) => (
-              <div
-                key={index}
-                className="relative pl-6 border-l-4 border-amber-500/30"
+            <div className="pt-2">
+              <PixelButton
+                variant="primary"
+                onClick={() => setChapterModal(null)}
+                className="w-full"
               >
-                <div className="absolute -left-2 top-0 w-4 h-4 bg-amber-500 rounded-full" />
-                <div className="bg-stone-100 p-4 rounded-lg border-2 border-stone-300">
-                  <p className="text-pixel-brown-dark text-sm leading-relaxed">
-                    {panel}
-                  </p>
-                </div>
-              </div>
-            ))}
+                继续冒险
+              </PixelButton>
+            </div>
           </div>
-
-          <div className="text-center pt-4 border-t-2 border-pixel-brown-dark/20">
-            <p className="text-pixel-brown-dark/60 text-xs">
-            🏆 解锁更多成就以继续阅读剧情
-          </p>
-          </div>
-        </div>
         )}
       </PixelModal>
+
+      {achievementNotification && (
+        <AchievementNotification
+          name={achievementNotification.name}
+          description={achievementNotification.description}
+          icon={achievementNotification.icon}
+          reward={achievementNotification.reward}
+          onClose={() => setAchievementNotification(null)}
+        />
+      )}
     </div>
   );
 }

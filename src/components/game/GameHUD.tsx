@@ -1,4 +1,4 @@
-import { Heart, Gem, Zap, Shield, Magnet, Pause, Play } from 'lucide-react';
+import { Heart, Gem, Zap, Shield, Magnet, Pause, Play, Clock, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '@/store/useGameStore';
 import { cn } from '@/lib/utils';
 import type { EngineState } from '@/game/types';
@@ -6,8 +6,17 @@ import type { EngineState } from '@/game/types';
 interface GameHUDProps {
   className?: string;
   engineState?: EngineState;
+  remainingTime?: number;
+  timeLimit?: number;
+  levelType?: 'normal' | 'timed';
   onPause?: () => void;
   onResume?: () => void;
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 function formatDistance(meters: number): string {
@@ -74,7 +83,7 @@ const HeartIcon: React.FC<{ filled: boolean }> = ({ filled }) => (
   />
 );
 
-export default function GameHUD({ className, engineState, onPause, onResume }: GameHUDProps) {
+export default function GameHUD({ className, engineState, remainingTime: rt, timeLimit: tl, levelType: lt, onPause, onResume }: GameHUDProps) {
   const {
     score,
     distance,
@@ -96,6 +105,11 @@ export default function GameHUD({ className, engineState, onPause, onResume }: G
   const effects = engineState?.activeEffects ?? storeEffects;
   const paused = engineState?.isPaused ?? isPaused;
   const playing = engineState?.isPlaying ?? isPlaying;
+  const remainingTime = rt ?? engineState?.remainingTime;
+  const timeLimit = tl ?? engineState?.timeLimit;
+  const levelType = lt ?? engineState?.levelType;
+
+  const isUrgent = remainingTime !== undefined && remainingTime < 10;
 
   const handlePauseToggle = () => {
     if (paused) {
@@ -118,6 +132,43 @@ export default function GameHUD({ className, engineState, onPause, onResume }: G
         className
       )}
     >
+      {levelType === 'timed' && remainingTime !== undefined && timeLimit !== undefined && (
+        <div className="flex justify-center pointer-events-auto">
+          <div
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-xl backdrop-blur-md border',
+              isUrgent
+                ? 'bg-red-900/70 border-red-500/70 animate-pulse'
+                : 'bg-black/50 border-white/10'
+            )}
+          >
+            {isUrgent ? (
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+            ) : (
+              <Clock className="w-5 h-5 text-amber-400" />
+            )}
+            <div className="flex flex-col items-start">
+              <span className="text-[10px] text-white/60 leading-none mb-0.5">限时挑战</span>
+              <span className={cn(
+                'text-xl font-mono font-bold leading-none',
+                isUrgent ? 'text-red-400' : 'text-amber-400'
+              )}>
+                {formatTime(remainingTime)}
+              </span>
+            </div>
+            <div className="ml-2 w-20 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-500',
+                  isUrgent ? 'bg-red-500' : 'bg-amber-500'
+                )}
+                style={{ width: `${Math.min(100, (remainingTime / timeLimit) * 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between pointer-events-auto">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-lg">

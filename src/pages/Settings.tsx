@@ -91,12 +91,13 @@ export default function Settings() {
         exportTime: Date.now(),
         player: {
           coins: playerState.coins,
-          totalScore: playerState.totalScore,
+          stats: playerState.stats,
           mineCarts: playerState.mineCarts,
           currentMineCartId: playerState.currentMineCartId,
           achievements: playerState.achievements,
           inventory: playerState.inventory,
           gameRecords: playerState.gameRecords,
+          unlockedLevels: playerState.unlockedLevels,
         },
         settings: {
           soundVolume,
@@ -145,12 +146,13 @@ export default function Settings() {
       if (data.player.coins !== undefined) {
         usePlayerStore.setState({
           coins: data.player.coins,
-          totalScore: data.player.totalScore,
+          stats: data.player.stats ?? usePlayerStore.getState().stats,
           mineCarts: data.player.mineCarts,
           currentMineCartId: data.player.currentMineCartId,
           achievements: data.player.achievements,
           inventory: data.player.inventory,
           gameRecords: data.player.gameRecords,
+          unlockedLevels: data.player.unlockedLevels ?? usePlayerStore.getState().unlockedLevels,
         });
       }
 
