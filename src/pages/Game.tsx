@@ -134,18 +134,41 @@ export default function Game() {
 
   const handleStateChange = useCallback((state: any) => {
     setCurrentEngineState(state);
+    const gameStore = useGameStore.getState();
+    if (state.isGameOver && !gameStore.isGameOver) {
+      gameStore.endGame();
+    } else if (state.isPlaying && !state.isGameOver && gameStore.isGameOver) {
+      gameStore.startGame();
+    }
   }, []);
 
   const handleUseItem = useCallback(
     (type: 'shield' | 'magnet' | 'boost' | 'doubleScore' | 'revive' | 'extraLife') => {
+      if (type === 'extraLife') {
+        const engineState = gameCanvasRef.current?.getEngine()?.getState();
+        const maxHp = minecartData?.health ?? 100;
+        if (engineState && engineState.health >= maxHp) {
+          return false;
+        }
+      }
       const success = gameCanvasRef.current?.useItem(type);
       if (success) {
         updateProgress({ type: 'useItems', amount: 1 });
       }
       return success ?? false;
     },
-    [updateProgress]
+    [updateProgress, minecartData]
   );
+
+  const handleRevive = useCallback(() => {
+    setLastSessionStats(null);
+    const { resetGame } = useGameStore.getState();
+    resetGame();
+    const engine = gameCanvasRef.current?.getEngine();
+    if (engine) {
+      useGameStore.getState().startGame();
+    }
+  }, []);
 
   useEffect(() => {
     if (levelConfig && minecartConfig && !isInitialized && gameCanvasRef.current) {
@@ -257,6 +280,7 @@ export default function Game() {
           onMoveRight={handleMoveRight}
           onJump={handleJump}
           onUseItem={handleUseItem}
+          onRevive={handleRevive}
         />
 
         <GameOverModal

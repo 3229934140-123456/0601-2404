@@ -402,12 +402,11 @@ export class GameEngine {
   private updateScoreAndDistance(deltaTime: number): void {
     this.state.distance = updateDistance(this.state.distance, this.state.speed, deltaTime);
 
-    const hasDoubleScore = this.itemsUsed.includes('doubleScore') &&
-      this.state.activeEffects.some((e) => e.type === 'boost' && e.remainingTime > 0);
+    const hasDoubleScore = this.state.activeEffects.some((e) => e.type === 'doubleScore');
     const hasBoost = this.state.activeEffects.some((e) => e.type === 'boost');
     let scoreMultiplier = 1;
-    if (hasDoubleScore) scoreMultiplier = 2;
-    else if (hasBoost) scoreMultiplier = 1.5;
+    if (hasDoubleScore) scoreMultiplier *= 2;
+    if (hasBoost) scoreMultiplier *= 1.5;
     const newScore = calculateScore(this.state.distance, this.state.ores, scoreMultiplier);
 
     if (newScore !== this.state.score) {
@@ -597,7 +596,7 @@ export class GameEngine {
     }
   }
 
-  private addEffect(type: 'boost' | 'shield' | 'magnet', duration: number): void {
+  private addEffect(type: 'boost' | 'shield' | 'magnet' | 'doubleScore', duration: number): void {
     const existingIndex = this.state.activeEffects.findIndex((e) => e.type === type);
 
     if (existingIndex !== -1) {
@@ -819,7 +818,7 @@ export class GameEngine {
     this.itemsUsed.push(type);
 
     if (type === 'doubleScore') {
-      this.addEffect('boost', durations.doubleScore);
+      this.addEffect('doubleScore', durations.doubleScore);
     } else if (type === 'extraLife') {
       this.addExtraLife();
     } else if (durations[type] !== undefined) {
@@ -843,6 +842,8 @@ export class GameEngine {
     this.minecart.y = this.groundY;
     this.minecart.velocityY = 0;
     this.minecart.isJumping = false;
+
+    this.recalculateSpeed();
 
     this.notifyStateChange();
     return true;

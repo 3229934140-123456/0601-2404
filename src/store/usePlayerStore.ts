@@ -279,6 +279,11 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
             case 'purchaseMinecart':
               currentProgress = updatedStats.minecartsPurchased;
               break;
+            case 'firstPlay':
+              if (sessionStats.score > 0 || sessionStats.distance > 0) {
+                currentProgress = Math.max(currentProgress, 1);
+              }
+              break;
           }
 
           const shouldUnlock =
@@ -440,6 +445,26 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
         stats: state.stats,
         unlockedLevels: state.unlockedLevels,
       }),
+      merge: (persistedState, currentState) => {
+        const merged = { ...currentState, ...(persistedState as Partial<PlayerState>) };
+        if (merged.achievements) {
+          const allIds = new Set(achievementData.map((a) => a.id));
+          const existingIds = new Set(merged.achievements.map((a) => a.id));
+          for (const id of allIds) {
+            if (!existingIds.has(id)) {
+              const dataAch = achievementData.find((a) => a.id === id);
+              if (dataAch) {
+                merged.achievements.push({
+                  ...dataAch,
+                  unlocked: false,
+                  condition: { ...dataAch.condition, current: 0 },
+                });
+              }
+            }
+          }
+        }
+        return merged;
+      },
     }
   )
 );

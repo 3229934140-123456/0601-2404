@@ -187,6 +187,9 @@ export default function Achievements() {
       case 'purchaseMinecart':
         current = Math.min(stats.minecartsPurchased, target);
         break;
+      case 'firstPlay':
+        current = storeAch?.unlocked ? 1 : (stats.totalScore > 0 || stats.totalDistance > 0 ? 1 : 0);
+        break;
       default:
         current = storeAch?.condition.current ?? 0;
     }

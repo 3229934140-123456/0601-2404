@@ -117,7 +117,7 @@ export interface DailyQuest {
 }
 
 export interface ActiveEffect {
-  type: 'boost' | 'shield' | 'magnet';
+  type: 'boost' | 'shield' | 'magnet' | 'doubleScore';
   duration: number;
   remainingTime: number;
   startTime: number;

@@ -13,6 +13,7 @@ interface GameControlsProps {
   onMoveRight?: () => void;
   onJump?: () => void;
   onUseItem?: (type: ItemTypeKey) => boolean;
+  onRevive?: () => void;
   showOnMobile?: boolean;
 }
 
@@ -99,6 +100,7 @@ export default function GameControls({
   onMoveRight,
   onJump,
   onUseItem,
+  onRevive,
   showOnMobile = true,
 }: GameControlsProps) {
   const { isPlaying, isPaused, isGameOver } = useGameStore();
@@ -158,9 +160,12 @@ export default function GameControls({
       const success = onUseItem?.(type);
       if (success !== false) {
         updateInventory(invId, -1);
+        if (type === 'revive') {
+          onRevive?.();
+        }
       }
     },
-    [inventory, onUseItem, updateInventory, isGameOver]
+    [inventory, onUseItem, onRevive, updateInventory, isGameOver]
   );
 
   useEffect(() => {

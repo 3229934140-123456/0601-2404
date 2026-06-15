@@ -45,6 +45,7 @@ const EffectIcon: React.FC<{ type: string; remainingTime: number }> = ({
     boost: '加速',
     shield: '护盾',
     magnet: '磁铁',
+    doubleScore: '双倍',
   };
 
   const effectColors: Record<string, { bg: string; icon: React.ReactNode }> = {
@@ -59,6 +60,10 @@ const EffectIcon: React.FC<{ type: string; remainingTime: number }> = ({
     magnet: {
       bg: 'bg-pink-500/20 border-pink-500/50',
       icon: <Magnet className="w-5 h-5 text-pink-400" />,
+    },
+    doubleScore: {
+      bg: 'bg-purple-500/20 border-purple-500/50',
+      icon: <Zap className="w-5 h-5 text-purple-400" />,
     },
   };
 
@@ -245,7 +250,7 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
             <EffectIcon
               key={`${effect.type}-${index}`}
               type={effect.type}
-              remainingTime={effect.remainingTime ?? effect.duration}
+              remainingTime={'remainingTime' in effect ? (effect as any).remainingTime : effect.duration}
             />
           ))}
         </div>

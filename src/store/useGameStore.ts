@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type TrackPosition = 'left' | 'center' | 'right';
 
 export type ActiveEffect = {
-  type: 'shield' | 'magnet' | 'double_coins';
+  type: 'shield' | 'magnet' | 'double_coins' | 'boost' | 'doubleScore';
   duration: number;
   startTime: number;
 };

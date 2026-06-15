@@ -1,7 +1,7 @@
 export type AchievementCategory = 'collection' | 'score' | 'distance' | 'special';
 
 export interface AchievementCondition {
-  type: 'collectOre' | 'collectGoldOre' | 'singleScore' | 'totalScore' | 'singleDistance' | 'totalDistance' | 'clearLevels' | 'useItems' | 'noDamage' | 'purchaseMinecart';
+  type: 'collectOre' | 'collectGoldOre' | 'singleScore' | 'totalScore' | 'singleDistance' | 'totalDistance' | 'clearLevels' | 'useItems' | 'noDamage' | 'purchaseMinecart' | 'firstPlay';
   target: number;
   current: number;
 }
@@ -183,6 +183,20 @@ export const achievements: Achievement[] = [
     condition: {
       type: 'clearLevels',
       target: 5,
+      current: 0,
+    },
+  },
+  {
+    id: 'achievement-16',
+    name: '入门矿工',
+    description: '完成第一局游戏',
+    icon: 'Pickaxe',
+    reward: 50,
+    unlocked: false,
+    category: 'special',
+    condition: {
+      type: 'firstPlay',
+      target: 1,
       current: 0,
     },
   },
