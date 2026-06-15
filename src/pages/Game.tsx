@@ -137,7 +137,7 @@ export default function Game() {
   }, []);
 
   const handleUseItem = useCallback(
-    (type: 'shield' | 'magnet' | 'boost') => {
+    (type: 'shield' | 'magnet' | 'boost' | 'doubleScore' | 'revive' | 'extraLife') => {
       const success = gameCanvasRef.current?.useItem(type);
       if (success) {
         updateProgress({ type: 'useItems', amount: 1 });
@@ -248,6 +248,7 @@ export default function Game() {
           remainingTime={timeState.remaining}
           timeLimit={timeState.limit}
           levelType={levelData?.type}
+          maxHealth={minecartData?.health}
         />
 
         <GameControls

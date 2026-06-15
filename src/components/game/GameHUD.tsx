@@ -9,6 +9,7 @@ interface GameHUDProps {
   remainingTime?: number;
   timeLimit?: number;
   levelType?: 'normal' | 'timed';
+  maxHealth?: number;
   onPause?: () => void;
   onResume?: () => void;
 }
@@ -36,54 +37,51 @@ function formatScore(score: number): string {
   return score.toString();
 }
 
-const EffectIcon: React.FC<{ type: 'boost' | 'shield' | 'magnet'; remainingTime: number }> = ({
+const EffectIcon: React.FC<{ type: string; remainingTime: number }> = ({
   type,
   remainingTime,
 }) => {
-  const icons = {
-    boost: <Zap className="w-5 h-5 text-yellow-400" />,
-    shield: <Shield className="w-5 h-5 text-blue-400" />,
-    magnet: <Magnet className="w-5 h-5 text-pink-400" />,
-  };
-
-  const labels = {
+  const effectLabels: Record<string, string> = {
     boost: '加速',
     shield: '护盾',
     magnet: '磁铁',
   };
 
-  const colors = {
-    boost: 'bg-yellow-500/20 border-yellow-500/50',
-    shield: 'bg-blue-500/20 border-blue-500/50',
-    magnet: 'bg-pink-500/20 border-pink-500/50',
+  const effectColors: Record<string, { bg: string; icon: React.ReactNode }> = {
+    boost: {
+      bg: 'bg-yellow-500/20 border-yellow-500/50',
+      icon: <Zap className="w-5 h-5 text-yellow-400" />,
+    },
+    shield: {
+      bg: 'bg-blue-500/20 border-blue-500/50',
+      icon: <Shield className="w-5 h-5 text-blue-400" />,
+    },
+    magnet: {
+      bg: 'bg-pink-500/20 border-pink-500/50',
+      icon: <Magnet className="w-5 h-5 text-pink-400" />,
+    },
   };
+
+  const cfg = effectColors[type];
+  if (!cfg) return null;
 
   return (
     <div
       className={cn(
         'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border backdrop-blur-sm',
-        colors[type]
+        cfg.bg
       )}
     >
-      {icons[type]}
+      {cfg.icon}
       <div className="flex flex-col items-start">
-        <span className="text-xs font-medium text-white">{labels[type]}</span>
+        <span className="text-xs font-medium text-white">{effectLabels[type] || type}</span>
         <span className="text-[10px] text-white/70">{remainingTime.toFixed(1)}s</span>
       </div>
     </div>
   );
 };
 
-const HeartIcon: React.FC<{ filled: boolean }> = ({ filled }) => (
-  <Heart
-    className={cn(
-      'w-5 h-5 transition-all duration-200',
-      filled ? 'text-red-500 fill-red-500' : 'text-gray-600'
-    )}
-  />
-);
-
-export default function GameHUD({ className, engineState, remainingTime: rt, timeLimit: tl, levelType: lt, onPause, onResume }: GameHUDProps) {
+export default function GameHUD({ className, engineState, remainingTime: rt, timeLimit: tl, levelType: lt, maxHealth: mh, onPause, onResume }: GameHUDProps) {
   const {
     score,
     distance,
@@ -101,7 +99,7 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
   const displayDistance = engineState?.distance ?? distance;
   const displayOres = engineState?.ores ?? oreCount;
   const displayHealth = engineState?.health ?? lives;
-  const displayMaxHealth = engineState ? (useGameStore.getState().maxLives * 33.33) : maxLives;
+  const displayMaxHealth = mh ?? engineState?.health ?? (maxLives * 33.33);
   const effects = engineState?.activeEffects ?? storeEffects;
   const paused = engineState?.isPaused ?? isPaused;
   const playing = engineState?.isPlaying ?? isPlaying;
@@ -110,6 +108,13 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
   const levelType = lt ?? engineState?.levelType;
 
   const isUrgent = remainingTime !== undefined && remainingTime < 10;
+
+  const healthPercent = displayMaxHealth > 0
+    ? Math.min(100, Math.max(0, (displayHealth / displayMaxHealth) * 100))
+    : 0;
+
+  const healthColor = healthPercent > 60 ? 'bg-green-500' : healthPercent > 30 ? 'bg-yellow-500' : 'bg-red-500';
+  const hasShield = effects.some((e) => e.type === 'shield');
 
   const handlePauseToggle = () => {
     if (paused) {
@@ -202,20 +207,44 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
             )}
           </button>
 
-          <div className="flex items-center gap-1 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-lg">
-            {Array.from({ length: displayMaxHealth }).map((_, i) => (
-              <HeartIcon key={i} filled={i < displayHealth} />
-            ))}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-black/50 backdrop-blur-sm rounded-lg min-w-[120px]">
+            <Heart className={cn(
+              'w-4 h-4 flex-shrink-0',
+              hasShield ? 'text-blue-400' : healthPercent > 30 ? 'text-red-500 fill-red-500' : 'text-red-400 animate-pulse'
+            )} />
+            <div className="flex-1 flex flex-col gap-0.5">
+              <div className="flex items-center justify-between">
+                <span className={cn(
+                  'text-xs font-mono font-bold',
+                  hasShield ? 'text-blue-400' : healthPercent > 30 ? 'text-white' : 'text-red-400'
+                )}>
+                  {Math.ceil(displayHealth)}
+                  <span className="text-white/40 text-[10px]">/{Math.ceil(displayMaxHealth)}</span>
+                </span>
+                {hasShield && (
+                  <Shield className="w-3 h-3 text-blue-400" />
+                )}
+              </div>
+              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-300',
+                    hasShield ? 'bg-blue-400' : healthColor
+                  )}
+                  style={{ width: `${healthPercent}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {effects.length > 0 && (
-        <div className="flex items-center gap-2 pointer-events-auto">
+        <div className="flex items-center gap-2 pointer-events-auto flex-wrap">
           {effects.map((effect, index) => (
             <EffectIcon
               key={`${effect.type}-${index}`}
-              type={effect.type as 'boost' | 'shield' | 'magnet'}
+              type={effect.type}
               remainingTime={effect.remainingTime ?? effect.duration}
             />
           ))}

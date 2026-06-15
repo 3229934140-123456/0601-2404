@@ -135,13 +135,16 @@ export default function LevelSelect() {
     useState<string>(currentMineCartId);
 
   useEffect(() => {
-    if (!unlockedLevels.includes(selectedMinecartId)) {
-      const unlocked = mineCarts.find((m) => m.unlocked);
-      if (unlocked) {
-        setSelectedMinecartId(unlocked.id);
+    const current = mineCarts.find((m) => m.id === currentMineCartId);
+    if (current?.unlocked) {
+      setSelectedMinecartId(currentMineCartId);
+    } else {
+      const firstUnlocked = mineCarts.find((m) => m.unlocked);
+      if (firstUnlocked) {
+        setSelectedMinecartId(firstUnlocked.id);
       }
     }
-  }, [mineCarts, selectedMinecartId, unlockedLevels]);
+  }, [currentMineCartId, mineCarts]);
 
   const highScores = useMemo(() => {
     const scores: Record<string, number> = {};

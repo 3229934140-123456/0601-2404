@@ -171,6 +171,18 @@ export const usePlayerStore = create<PlayerState & PlayerActions>()(
             minecartsPurchased: stats.minecartsPurchased + 1,
           },
         });
+
+        get().checkAndUnlockAchievements({
+          score: 0,
+          distance: 0,
+          oreCount: 0,
+          goldOreCount: 0,
+          itemsUsed: 0,
+          damageTaken: 0,
+          levelId: '',
+          levelType: 'normal',
+        });
+
         return true;
       },
 

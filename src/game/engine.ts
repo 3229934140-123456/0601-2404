@@ -402,7 +402,12 @@ export class GameEngine {
   private updateScoreAndDistance(deltaTime: number): void {
     this.state.distance = updateDistance(this.state.distance, this.state.speed, deltaTime);
 
-    const scoreMultiplier = this.state.activeEffects.some((e) => e.type === 'boost') ? 2 : 1;
+    const hasDoubleScore = this.itemsUsed.includes('doubleScore') &&
+      this.state.activeEffects.some((e) => e.type === 'boost' && e.remainingTime > 0);
+    const hasBoost = this.state.activeEffects.some((e) => e.type === 'boost');
+    let scoreMultiplier = 1;
+    if (hasDoubleScore) scoreMultiplier = 2;
+    else if (hasBoost) scoreMultiplier = 1.5;
     const newScore = calculateScore(this.state.distance, this.state.ores, scoreMultiplier);
 
     if (newScore !== this.state.score) {
@@ -796,17 +801,31 @@ export class GameEngine {
     this.renderer.resize(width, height);
   }
 
-  useItem(type: 'shield' | 'magnet' | 'boost'): boolean {
-    if (!this.state.isPlaying || this.state.isGameOver) return false;
+  useItem(type: 'shield' | 'magnet' | 'boost' | 'doubleScore' | 'revive' | 'extraLife'): boolean {
+    if (!this.state.isPlaying || this.state.isGameOver) {
+      if (type === 'revive' && this.state.isGameOver) {
+        return this.revive();
+      }
+      return false;
+    }
 
     const durations: Record<string, number> = {
       shield: 10,
       magnet: 15,
       boost: 8,
+      doubleScore: 20,
     };
 
     this.itemsUsed.push(type);
-    this.addEffect(type, durations[type]);
+
+    if (type === 'doubleScore') {
+      this.addEffect('boost', durations.doubleScore);
+    } else if (type === 'extraLife') {
+      this.addExtraLife();
+    } else if (durations[type] !== undefined) {
+      this.addEffect(type as 'shield' | 'magnet' | 'boost', durations[type]);
+    }
+
     this.notifyStateChange();
     return true;
   }

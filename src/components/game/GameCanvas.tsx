@@ -14,7 +14,7 @@ export interface GameCanvasHandle {
   moveLeft: () => void;
   moveRight: () => void;
   jump: () => void;
-  useItem: (type: 'shield' | 'magnet' | 'boost') => boolean;
+  useItem: (type: 'shield' | 'magnet' | 'boost' | 'doubleScore' | 'revive' | 'extraLife') => boolean;
   getEngine: () => GameEngine | null;
 }
 
@@ -138,7 +138,7 @@ const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(function GameCa
     jump: () => {
       engineRef.current?.jump();
     },
-    useItem: (type: 'shield' | 'magnet' | 'boost') => {
+    useItem: (type: 'shield' | 'magnet' | 'boost' | 'doubleScore' | 'revive' | 'extraLife') => {
       return engineRef.current?.useItem(type) ?? false;
     },
     getEngine: () => engineRef.current,
