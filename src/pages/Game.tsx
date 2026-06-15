@@ -42,6 +42,7 @@ export default function Game() {
     levelId?: string;
     minecartId?: string;
   }) | null>(null);
+  const [isFinalGameOver, setIsFinalGameOver] = useState(false);
   const [timeState, setTimeState] = useState<{
     remaining?: number;
     limit?: number;
@@ -104,6 +105,7 @@ export default function Game() {
         minecartId,
       };
       setLastSessionStats(enrichedStats);
+      setIsFinalGameOver(false);
 
       updateProgress({ type: 'completeLevels', amount: 1 });
       updateProgress({ type: 'earnScore', amount: stats.score });
@@ -162,6 +164,7 @@ export default function Game() {
 
   const handleRevive = useCallback(() => {
     setLastSessionStats(null);
+    setIsFinalGameOver(false);
     const { resetGame } = useGameStore.getState();
     resetGame();
     const engine = gameCanvasRef.current?.getEngine();
@@ -175,6 +178,7 @@ export default function Game() {
       gameCanvasRef.current.start(levelConfig, minecartConfig);
       setIsInitialized(true);
       setLastSessionStats(null);
+      setIsFinalGameOver(false);
       setTimeState({});
     }
   }, [levelConfig, minecartConfig, isInitialized]);
@@ -204,6 +208,7 @@ export default function Game() {
   const handleRestart = () => {
     setShowPauseMenu(false);
     setLastSessionStats(null);
+    setIsFinalGameOver(false);
     setTimeState({});
     setIsInitialized(false);
     setTimeout(() => {
@@ -287,6 +292,8 @@ export default function Game() {
           onRestart={handleRestart}
           onBackToMenu={handleBackToMenu}
           sessionStats={lastSessionStats || undefined}
+          isFinalGameOver={isFinalGameOver}
+          onFinalize={() => setIsFinalGameOver(true)}
         />
 
         <PixelModal

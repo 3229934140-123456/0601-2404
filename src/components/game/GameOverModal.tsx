@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Trophy, Gem, MapPin, Coins, RotateCcw, Home, Sparkles, Clock, Shield, Zap } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Trophy, Gem, MapPin, Coins, RotateCcw, Home, Sparkles, Clock, Shield, Zap, Book, TrendingUp } from 'lucide-react';
 import { useGameStore } from '@/store/useGameStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { cn } from '@/lib/utils';
 import type { GameOverStats } from '@/game/engine';
 import { getLevelById } from '@/data/levels';
+import { achievements as achievementsData } from '@/data/achievements';
 import type { LevelType } from '@/types';
 
 interface GameOverModalProps {
@@ -15,6 +16,8 @@ interface GameOverModalProps {
     levelId?: string;
     minecartId?: string;
   };
+  isFinalGameOver?: boolean;
+  onFinalize?: () => void;
 }
 
 interface StatCardProps {
@@ -62,6 +65,8 @@ export default function GameOverModal({
   onRestart,
   onBackToMenu,
   sessionStats,
+  isFinalGameOver = false,
+  onFinalize,
 }: GameOverModalProps) {
   const { isGameOver, score, distance, oreCount, resetGame } = useGameStore();
   const {
@@ -69,11 +74,16 @@ export default function GameOverModal({
     addGameRecord,
     currentMineCartId,
     checkAndUnlockAchievements,
+    coins: currentCoins,
+    achievements,
   } = usePlayerStore();
   const [isNewRecord, setIsNewRecord] = useState(false);
   const [earnedCoins, setEarnedCoins] = useState(0);
   const [showContent, setShowContent] = useState(false);
-  const [newAchievements, setNewAchievements] = useState<string[]>([]);
+  const [unlockedAchIds, setUnlockedAchIds] = useState<string[]>([]);
+  const [coinsBeforeSession, setCoinsBeforeSession] = useState(0);
+  const [achCountBefore, setAchCountBefore] = useState(0);
+  const [hasFinalized, setHasFinalized] = useState(false);
 
   const finalScore = sessionStats?.score ?? score;
   const finalDistance = sessionStats?.distance ?? distance;
@@ -83,7 +93,20 @@ export default function GameOverModal({
   const minecartId = sessionStats?.minecartId ?? currentMineCartId;
 
   useEffect(() => {
-    if (isGameOver && sessionStats) {
+    if (isGameOver && sessionStats && !hasFinalized) {
+      setCoinsBeforeSession(usePlayerStore.getState().coins);
+      setAchCountBefore(usePlayerStore.getState().achievements.filter((a) => a.unlocked).length);
+      const timer = setTimeout(() => setShowContent(true), 100);
+      return () => clearTimeout(timer);
+    } else {
+      setShowContent(false);
+    }
+  }, [isGameOver, sessionStats, hasFinalized]);
+
+  useEffect(() => {
+    if (isFinalGameOver && !hasFinalized && sessionStats) {
+      setHasFinalized(true);
+
       const coins = Math.floor(finalScore / 10) + finalOres * 5 + (sessionStats.goldOreCount || 0) * 20;
       setEarnedCoins(coins);
 
@@ -94,8 +117,7 @@ export default function GameOverModal({
       const highScore = recordsForLevel.length > 0
         ? Math.max(...recordsForLevel.map((r) => r.score))
         : 0;
-      const newRecord = finalScore > highScore;
-      setIsNewRecord(newRecord);
+      setIsNewRecord(finalScore > highScore);
 
       const itemsUsedCount = sessionStats.itemsUsed?.length || 0;
       const unlocked = checkAndUnlockAchievements({
@@ -108,7 +130,7 @@ export default function GameOverModal({
         levelId: levelId,
         levelType: isTimed ? 'timed' : 'normal',
       });
-      setNewAchievements(unlocked.map((a) => a.id));
+      setUnlockedAchIds(unlocked.map((a) => a.id));
 
       addCoins(coins);
       addGameRecord({
@@ -125,23 +147,40 @@ export default function GameOverModal({
         timeLimit: sessionStats.timeLimit,
         timeElapsed: sessionStats.timeElapsed,
       });
-
-      const timer = setTimeout(() => setShowContent(true), 100);
-      return () => clearTimeout(timer);
-    } else {
-      setShowContent(false);
-      setNewAchievements([]);
     }
-  }, [isGameOver, sessionStats, finalScore, finalDistance, finalOres, levelId, minecartId, addCoins, addGameRecord, checkAndUnlockAchievements]);
+  }, [isFinalGameOver, hasFinalized, sessionStats, finalScore, finalDistance, finalOres, levelId, minecartId, addCoins, addGameRecord, checkAndUnlockAchievements]);
+
+  const unlockedAchNames = useMemo(() => {
+    return unlockedAchIds.map((id) => {
+      const ach = achievementsData.find((a) => a.id === id);
+      return ach ? { name: ach.name, reward: ach.reward } : { name: id, reward: 0 };
+    });
+  }, [unlockedAchIds]);
+
+  const achCountAfter = achievements.filter((a) => a.unlocked).length;
+  const totalAchCount = achievementsData.length;
+  const storyProgressBefore = Math.floor(achCountBefore / 3);
+  const storyProgressAfter = Math.floor(achCountAfter / 3);
+  const storyChapterUnlocked = storyProgressAfter > storyProgressBefore;
 
   const handleRestart = () => {
-    resetGame();
-    onRestart?.();
+    if (!hasFinalized) {
+      onFinalize?.();
+    }
+    setTimeout(() => {
+      resetGame();
+      onRestart?.();
+    }, 50);
   };
 
   const handleBackToMenu = () => {
-    resetGame();
-    onBackToMenu?.();
+    if (!hasFinalized) {
+      onFinalize?.();
+    }
+    setTimeout(() => {
+      resetGame();
+      onBackToMenu?.();
+    }, 50);
   };
 
   if (!isGameOver) {
@@ -245,26 +284,64 @@ export default function GameOverModal({
             )}
           </div>
 
-          {newAchievements.length > 0 && (
+          {unlockedAchNames.length > 0 && (
             <div className="p-3 bg-purple-500/20 rounded-xl border border-purple-500/30">
               <div className="flex items-center gap-2 mb-2">
                 <Trophy className="w-4 h-4 text-purple-400" />
                 <span className="text-xs font-bold text-purple-300">
-                  解锁 {newAchievements.length} 个新成就！
+                  解锁 {unlockedAchNames.length} 个新成就
                 </span>
               </div>
-              <div className="text-[10px] text-white/60">
-                前往成就图鉴领取奖励
+              <div className="space-y-1">
+                {unlockedAchNames.map((ach) => (
+                  <div key={ach.name} className="flex items-center justify-between text-[11px]">
+                    <span className="text-purple-200">{ach.name}</span>
+                    {ach.reward > 0 && (
+                      <span className="flex items-center gap-1 text-amber-400">
+                        <Coins className="w-3 h-3" />+{ach.reward}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-2 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-xl border border-yellow-500/30">
-            <Coins className="w-6 h-6 text-yellow-400" />
-            <span className="text-white/70 text-sm">获得金币</span>
-            <span className="text-2xl font-bold text-yellow-400 font-mono">
-              +{earnedCoins}
-            </span>
+          {storyChapterUnlocked && (
+            <div className="p-3 bg-indigo-500/20 rounded-xl border border-indigo-500/30">
+              <div className="flex items-center gap-2">
+                <Book className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-bold text-indigo-300">
+                  像素剧情解锁新章节！
+                </span>
+              </div>
+              <div className="text-[11px] text-indigo-200/70 mt-1">
+                当前进度：{achCountAfter}/{totalAchCount} 成就 → 第 {storyProgressAfter} 章已开放
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 rounded-xl border border-yellow-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-amber-300">本局成长</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">金币</span>
+                <span className="text-amber-400 font-mono">
+                  {coinsBeforeSession} → {coinsBeforeSession + earnedCoins}
+                  <span className="text-green-400 ml-1">+{earnedCoins}</span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60">成就</span>
+                <span className="text-purple-400 font-mono">
+                  {achCountBefore} → {achCountAfter}
+                  {unlockedAchNames.length > 0 && <span className="text-green-400 ml-1">+{unlockedAchNames.length}</span>}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

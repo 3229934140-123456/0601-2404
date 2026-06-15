@@ -403,10 +403,7 @@ export class GameEngine {
     this.state.distance = updateDistance(this.state.distance, this.state.speed, deltaTime);
 
     const hasDoubleScore = this.state.activeEffects.some((e) => e.type === 'doubleScore');
-    const hasBoost = this.state.activeEffects.some((e) => e.type === 'boost');
-    let scoreMultiplier = 1;
-    if (hasDoubleScore) scoreMultiplier *= 2;
-    if (hasBoost) scoreMultiplier *= 1.5;
+    const scoreMultiplier = hasDoubleScore ? 2 : 1;
     const newScore = calculateScore(this.state.distance, this.state.ores, scoreMultiplier);
 
     if (newScore !== this.state.score) {

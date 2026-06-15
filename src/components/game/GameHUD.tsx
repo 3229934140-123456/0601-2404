@@ -1,4 +1,5 @@
-import { Heart, Gem, Zap, Shield, Magnet, Pause, Play, Clock, AlertTriangle } from 'lucide-react';
+import { Heart, Gem, Zap, Shield, Magnet, Pause, Play, Clock, AlertTriangle, Info, ChevronDown, ChevronUp, Gauge } from 'lucide-react';
+import { useState } from 'react';
 import { useGameStore } from '@/store/useGameStore';
 import { cn } from '@/lib/utils';
 import type { EngineState } from '@/game/types';
@@ -37,21 +38,68 @@ function formatScore(score: number): string {
   return score.toString();
 }
 
+const effectDetailConfig: Record<string, {
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+  textColor: string;
+  bgColor: string;
+  borderColor: string;
+}> = {
+  boost: {
+    label: '速度提升',
+    description: '矿车移动速度提升 50%',
+    icon: <Gauge className="w-4 h-4" />,
+    color: 'bg-yellow-500',
+    textColor: 'text-yellow-400',
+    bgColor: 'bg-yellow-500/10',
+    borderColor: 'border-yellow-500/30',
+  },
+  shield: {
+    label: '护盾保护',
+    description: '抵挡一次碰撞伤害',
+    icon: <Shield className="w-4 h-4" />,
+    color: 'bg-blue-500',
+    textColor: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/30',
+  },
+  magnet: {
+    label: '磁铁吸引',
+    description: '自动吸附附近矿石',
+    icon: <Magnet className="w-4 h-4" />,
+    color: 'bg-pink-500',
+    textColor: 'text-pink-400',
+    bgColor: 'bg-pink-500/10',
+    borderColor: 'border-pink-500/30',
+  },
+  doubleScore: {
+    label: '双倍分数',
+    description: '得分增长速度翻倍',
+    icon: <Zap className="w-4 h-4" />,
+    color: 'bg-purple-500',
+    textColor: 'text-purple-400',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/30',
+  },
+};
+
 const EffectIcon: React.FC<{ type: string; remainingTime: number }> = ({
   type,
   remainingTime,
 }) => {
   const effectLabels: Record<string, string> = {
-    boost: '加速',
+    boost: '速度↑',
     shield: '护盾',
     magnet: '磁铁',
-    doubleScore: '双倍',
+    doubleScore: '分数×2',
   };
 
   const effectColors: Record<string, { bg: string; icon: React.ReactNode }> = {
     boost: {
       bg: 'bg-yellow-500/20 border-yellow-500/50',
-      icon: <Zap className="w-5 h-5 text-yellow-400" />,
+      icon: <Gauge className="w-5 h-5 text-yellow-400" />,
     },
     shield: {
       bg: 'bg-blue-500/20 border-blue-500/50',
@@ -99,6 +147,8 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
     pauseGame,
     resumeGame,
   } = useGameStore();
+
+  const [showEffectDetail, setShowEffectDetail] = useState(false);
 
   const displayScore = engineState?.score ?? score;
   const displayDistance = engineState?.distance ?? distance;
@@ -253,6 +303,64 @@ export default function GameHUD({ className, engineState, remainingTime: rt, tim
               remainingTime={'remainingTime' in effect ? (effect as any).remainingTime : effect.duration}
             />
           ))}
+          <button
+            onClick={() => setShowEffectDetail(!showEffectDetail)}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1.5 rounded-lg border backdrop-blur-sm',
+              'bg-white/10 border-white/20 hover:bg-white/20 transition-colors'
+            )}
+            title="效果详情"
+          >
+            <Info className="w-4 h-4 text-white/70" />
+            {showEffectDetail ? (
+              <ChevronUp className="w-3 h-3 text-white/50" />
+            ) : (
+              <ChevronDown className="w-3 h-3 text-white/50" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {showEffectDetail && effects.length > 0 && (
+        <div className="pointer-events-auto max-w-xs">
+          <div className="bg-black/70 backdrop-blur-md rounded-xl border border-white/10 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Info className="w-3.5 h-3.5 text-white/50" />
+              <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">道具效果详情</span>
+            </div>
+            {effects.map((effect, index) => {
+              const cfg = effectDetailConfig[effect.type];
+              if (!cfg) return null;
+
+              const remaining = 'remainingTime' in effect ? (effect as any).remainingTime : effect.duration;
+              const duration = effect.duration;
+              const progress = duration > 0 ? Math.min(100, (remaining / duration) * 100) : 0;
+
+              return (
+                <div
+                  key={`detail-${effect.type}-${index}`}
+                  className={cn('flex items-center gap-2.5 p-2 rounded-lg border', cfg.bgColor, cfg.borderColor)}
+                >
+                  <div className={cn('w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0', cfg.color + '/20')}>
+                    <span className={cfg.textColor}>{cfg.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className={cn('text-xs font-bold', cfg.textColor)}>{cfg.label}</span>
+                      <span className="text-[10px] text-white/60 font-mono">{remaining.toFixed(1)}s</span>
+                    </div>
+                    <div className="text-[10px] text-white/40 mb-1">{cfg.description}</div>
+                    <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all duration-300', cfg.color)}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
